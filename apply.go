@@ -16,6 +16,7 @@ func (b *Board) Apply(m Move) func() {
 // If the move is not valid, this function has undefined behavior.
 func (b *Board) Apply2(m Move) *MoveApplication {
 	var moveApplication MoveApplication
+	moveApplication.Move = m
 	
 	// Configure data about which pieces move
 	var ourBitboardPtr, oppBitboardPtr *Bitboards
@@ -258,7 +259,12 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 // A null move is just that - the current player skips his move.
 // Used for Null Move Heuristic in the search engine.
 func (b *Board) ApplyNullMove() func() {
+	return b.ApplyNullMove2().Unapply
+}
 
+func (b *Board) ApplyNullMove2() MoveApplication {
+	var moveInfo MoveApplication
+	
 	// TODO - half-move clock?
 
 	// Clear the en-passant square
@@ -273,7 +279,7 @@ func (b *Board) ApplyNullMove() func() {
 	b.Wtomove = !b.Wtomove
 
 	// Generate the unapply function (closure)
-	unapply := func() {
+	moveInfo.Unapply = func() {
 		// Flip the player to move
 		b.hash ^= whiteToMoveZobristC
 		b.Wtomove = !b.Wtomove
@@ -282,8 +288,9 @@ func (b *Board) ApplyNullMove() func() {
 		b.hash ^= uint64(oldEpCaptureSquare) // restore the old one to the hash
 		b.enpassant = oldEpCaptureSquare
 	}
+
 	
-	return unapply
+	return moveInfo
 }
 
 func determinePieceType(b *Board, bb *Bitboards, squareMask uint64, pos uint8) (Piece, *uint64) {
