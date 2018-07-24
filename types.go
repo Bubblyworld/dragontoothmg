@@ -15,15 +15,18 @@ func oppColor(color ColorT) ColorT {
 type CastleRightsT uint8
 
 const (
-	queenSideCastleRights CastleRightsT = iota
-	kingSideCastleRights
+	Queenside CastleRightsT = iota
+	Kingside
+	NSides
 )
 
+// This just indicates whether castling rights have been lost, not whether
+// castling is actually possible.
 type CastleRightsFlagsT uint8
 
-// Flags
-const queenSideCastleRightsFlag = CastleRightsFlagsT(1) << queenSideCastleRights
-const kingSideCastleRightsFlag = CastleRightsFlagsT(1) << kingSideCastleRights
+func toFlag(side CastleRightsT) CastleRightsFlagsT {
+	return CastleRightsFlagsT(1) << side
+}
 
 // Each bitboard shall use little-endian rank-file mapping:
 // 56  57  58  59  60  61  62  63
@@ -127,98 +130,32 @@ func (b *Board) Enpassant() uint8 {
 	return b.enpassant
 }
 
-// Castle rights helpers. Data stored inside, from LSB:
-// 1 bit: White castle queenside
-// 1 bit: White castle kingside
-// 1 bit: Black castle queenside
-// 1 bit: Black castle kingside
-// This just indicates whether castling rights have been lost, not whether
-// castling is actually possible.
+// Castle rights helpers.
 
 // Castling helper functions for all 16 possible scenarios
-func (b *Board) whiteCanCastleQueenside() bool {
-	return b.castlerights[White] & queenSideCastleRightsFlag != 0
+func (b *Board) canCastle(color ColorT, side CastleRightsT) bool {
+	return b.castlerights[color] & toFlag(side) != 0
 }
-func (b *Board) whiteCanCastleKingside() bool {
-	return b.castlerights[White] & kingSideCastleRightsFlag != 0
+
+func (b *Board) weCanCastle(side CastleRightsT) bool {
+	return b.canCastle(b.Colortomove, side)
 }
-func (b *Board) blackCanCastleQueenside() bool {
-	return b.castlerights[Black] & queenSideCastleRightsFlag != 0
+
+func (b *Board) oppCanCastle(side CastleRightsT) bool {
+	return b.canCastle(oppColor(b.Colortomove), side)
 }
-func (b *Board) blackCanCastleKingside() bool {
-	return b.castlerights[Black] & kingSideCastleRightsFlag != 0
+
+func (b *Board) flipCastleRights(color ColorT, side CastleRightsT) {
+	b.castlerights[color] ^= toFlag(side)
+	b.hash ^= castleRightsZobristC[color][side]
 }
-func (b *Board) canCastleQueenside() bool {
-	if b.Colortomove == White {
-		return b.whiteCanCastleQueenside()
-	} else {
-		return b.blackCanCastleQueenside()
-	}
+
+func (b *Board) flipOurCastleRights(side CastleRightsT) {
+	b.flipCastleRights(b.Colortomove, side)
 }
-func (b *Board) canCastleKingside() bool {
-	if b.Colortomove == White {
-		return b.whiteCanCastleKingside()
-	} else {
-		return b.blackCanCastleKingside()
-	}
-}
-func (b *Board) oppCanCastleQueenside() bool {
-	if b.Colortomove == White {
-		return b.blackCanCastleQueenside()
-	} else {
-		return b.whiteCanCastleQueenside()
-	}
-}
-func (b *Board) oppCanCastleKingside() bool {
-	if b.Colortomove == White {
-		return b.blackCanCastleKingside()
-	} else {
-		return b.whiteCanCastleKingside()
-	}
-}
-func (b *Board) flipWhiteQueensideCastle() {
-	b.castlerights[White] ^= queenSideCastleRightsFlag
-	b.hash ^= castleRightsZobristC[1]
-}
-func (b *Board) flipWhiteKingsideCastle() {
-	b.castlerights[White] ^= kingSideCastleRightsFlag
-	b.hash ^= castleRightsZobristC[0]
-}
-func (b *Board) flipBlackQueensideCastle() {
-	b.castlerights[Black] ^= queenSideCastleRightsFlag
-	b.hash ^= castleRightsZobristC[3]
-}
-func (b *Board) flipBlackKingsideCastle() {
-	b.castlerights[Black] ^= kingSideCastleRightsFlag
-	b.hash ^= castleRightsZobristC[2]
-}
-func (b *Board) flipQueensideCastle() {
-	if b.Colortomove == White {
-		b.flipWhiteQueensideCastle()
-	} else {
-		b.flipBlackQueensideCastle()
-	}
-}
-func (b *Board) flipKingsideCastle() {
-	if b.Colortomove == White {
-		b.flipWhiteKingsideCastle()
-	} else {
-		b.flipBlackKingsideCastle()
-	}
-}
-func (b *Board) flipOppQueensideCastle() {
-	if b.Colortomove == White {
-		b.flipBlackQueensideCastle()
-	} else {
-		b.flipWhiteQueensideCastle()
-	}
-}
-func (b *Board) flipOppKingsideCastle() {
-	if b.Colortomove == White {
-		b.flipBlackKingsideCastle()
-	} else {
-		b.flipWhiteKingsideCastle()
-	}
+
+func (b *Board) flipOppCastleRights(side CastleRightsT) {
+	b.flipCastleRights(oppColor(b.Colortomove), side)
 }
 
 func (b *Board) isWhitePieceAt(pos uint8) bool {

@@ -13,17 +13,17 @@ func recomputeBoardHash(b *Board) uint64 {
 	if b.Colortomove == White {
 		hash ^= whiteToMoveZobristC
 	}
-	if b.whiteCanCastleKingside() {
-		hash ^= castleRightsZobristC[0]
+	if b.canCastle(White, Kingside) {
+		hash ^= castleRightsZobristC[White][Kingside]
 	}
-	if b.whiteCanCastleQueenside() {
-		hash ^= castleRightsZobristC[1]
+	if b.canCastle(White, Queenside) {
+		hash ^= castleRightsZobristC[White][Queenside]
 	}
-	if b.blackCanCastleKingside() {
-		hash ^= castleRightsZobristC[2]
+	if b.canCastle(Black, Kingside) {
+		hash ^= castleRightsZobristC[Black][Kingside]
 	}
-	if b.blackCanCastleQueenside() {
-		hash ^= castleRightsZobristC[3]
+	if b.canCastle(Black, Queenside) {
+		hash ^= castleRightsZobristC[Black][Queenside]
 	}
 	hash ^= uint64(b.enpassant)
 	for i := uint8(0); i < 64; i++ {
@@ -215,19 +215,19 @@ func (b *Board) ToFen() string {
 	}
 	position += " "
 	castleCount := 0
-	if b.whiteCanCastleKingside() {
+	if b.canCastle(White, Kingside) {
 		position += "K"
 		castleCount++
 	}
-	if b.whiteCanCastleQueenside() {
+	if b.canCastle(White, Queenside) {
 		position += "Q"
 		castleCount++
 	}
-	if b.blackCanCastleKingside() {
+	if b.canCastle(Black, Kingside) {
 		position += "k"
 		castleCount++
 	}
-	if b.blackCanCastleQueenside() {
+	if b.canCastle(Black, Queenside) {
 		position += "q"
 		castleCount++
 	}
@@ -305,16 +305,16 @@ func ParseFen(fen string) Board {
 		b.Colortomove = Black
 	}
 	if strings.Contains(tokens[2], "K") {
-		b.flipWhiteKingsideCastle()
+		b.flipCastleRights(White, Kingside)
 	}
 	if strings.Contains(tokens[2], "Q") {
-		b.flipWhiteQueensideCastle()
+		b.flipCastleRights(White, Queenside)
 	}
 	if strings.Contains(tokens[2], "k") {
-		b.flipBlackKingsideCastle()
+		b.flipCastleRights(Black, Kingside)
 	}
 	if strings.Contains(tokens[2], "q") {
-		b.flipBlackQueensideCastle()
+		b.flipCastleRights(Black, Queenside)
 	}
 	if tokens[3] != "-" {
 		res, err := AlgebraicToIndex(tokens[3])

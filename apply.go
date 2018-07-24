@@ -73,26 +73,26 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 			newRookLoc = m.To() + 1
 		}
 		// King moves always strip castling rights
-		if b.canCastleKingside() {
-			b.flipKingsideCastle()
+		if b.weCanCastle(Kingside) {
+			b.flipOurCastleRights(Kingside)
 			flippedKsCastle = true
 		}
-		if b.canCastleQueenside() {
-			b.flipQueensideCastle()
+		if b.weCanCastle(Queenside) {
+			b.flipOurCastleRights(Queenside)
 			flippedQsCastle = true
 		}
 	}
 
 	// Rook moves strip castling rights
 	if pieceType == Rook {
-		if b.canCastleKingside() && (fromBitboard&onlyFile[7] != 0) &&
+		if b.weCanCastle(Kingside) && (fromBitboard&onlyFile[7] != 0) &&
 			fromBitboard&ourStartingRankBb != 0 { // king's rook
 			flippedKsCastle = true
-			b.flipKingsideCastle()
-		} else if b.canCastleQueenside() && (fromBitboard&onlyFile[0] != 0) &&
+			b.flipOurCastleRights(Kingside)
+		} else if b.weCanCastle(Queenside) && (fromBitboard&onlyFile[0] != 0) &&
 			fromBitboard&ourStartingRankBb != 0 { // queen's rook
 			flippedQsCastle = true
-			b.flipQueensideCastle()
+			b.flipOurCastleRights(Queenside)
 		}
 	}
 
@@ -167,11 +167,11 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 
 	// If a rook was captured, it strips castling rights
 	if capturedPieceType == Rook {
-		if m.To()%8 == 7 && toBitboard&oppStartingRankBb != 0 && b.oppCanCastleKingside() { // captured king rook
-			b.flipOppKingsideCastle()
+		if m.To()%8 == 7 && toBitboard&oppStartingRankBb != 0 && b.oppCanCastle(Kingside) { // captured king rook
+			b.flipOppCastleRights(Kingside)
 			flippedOppKsCastle = true
-		} else if m.To()%8 == 0 && toBitboard&oppStartingRankBb != 0 && b.oppCanCastleQueenside() { // queen rooks
-			b.flipOppQueensideCastle()
+		} else if m.To()%8 == 0 && toBitboard&oppStartingRankBb != 0 && b.oppCanCastle(Queenside) { // queen rooks
+			b.flipOppCastleRights(Queenside)
 			flippedOppQsCastle = true
 		}
 	}
@@ -236,17 +236,18 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 
 		// Restore castling flags
 		// Must update castling flags AFTER turn swap
+		// TODO just keep the flags? No branch
 		if flippedKsCastle {
-			b.flipKingsideCastle()
+			b.flipOurCastleRights(Kingside)
 		}
 		if flippedQsCastle {
-			b.flipQueensideCastle()
+			b.flipOurCastleRights(Queenside)
 		}
 		if flippedOppKsCastle {
-			b.flipOppKingsideCastle()
+			b.flipOppCastleRights(Kingside)
 		}
 		if flippedOppQsCastle {
-			b.flipOppQueensideCastle()
+			b.flipOppCastleRights(Queenside)
 		}
 	}
 	

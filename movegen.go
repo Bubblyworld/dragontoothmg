@@ -426,17 +426,17 @@ func (b *Board) kingMoves(moveList *[]Move, allowDest uint64, includeCastling bo
 			kingsideClear := allPieces&((1<<5)|(1<<6)) == 0
 			queensideClear := allPieces&((1<<3)|(1<<2)|(1<<1)) == 0
 			// skip the king square, since this won't be called while in check
-			canCastleQueenside = b.whiteCanCastleQueenside() &&
+			canCastleQueenside = b.canCastle(White, Queenside) &&
 				queensideClear && !b.anyUnderDirectAttack(true, 2, 3)
-			canCastleKingside = b.whiteCanCastleKingside() &&
+			canCastleKingside = b.canCastle(White, Kingside) &&
 				kingsideClear && !b.anyUnderDirectAttack(true, 5, 6)
 		} else {
 			kingsideClear := allPieces&((1<<61)|(1<<62)) == 0
 			queensideClear := allPieces&((1<<57)|(1<<58)|(1<<59)) == 0
 			// skip the king square, since this won't be called while in check
-			canCastleQueenside = b.blackCanCastleQueenside() &&
+			canCastleQueenside = b.canCastle(Black, Queenside) &&
 				queensideClear && !b.anyUnderDirectAttack(false, 58, 59)
-			canCastleKingside = b.blackCanCastleKingside() &&
+			canCastleKingside = b.canCastle(Black, Kingside) &&
 				kingsideClear && !b.anyUnderDirectAttack(false, 61, 62)
 		}
 		if canCastleKingside {

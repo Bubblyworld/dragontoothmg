@@ -25,8 +25,10 @@ func generateZobristConstants() {
 			pieceSquareZobristC[i][j] = rand.Uint64()
 		}
 	}
-	for i := 0; i < 4; i++ {
-		castleRightsZobristC[i] = rand.Uint64()
+	for i := White; i < NColors; i++ {
+		for j := Queenside; j < NSides; j++ {
+			castleRightsZobristC[i][j] = rand.Uint64()
+		}
 	}
 }
 
@@ -175,7 +177,7 @@ const Startpos = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 // Zobrist Constants
 var pieceSquareZobristC [12][64]uint64
-var castleRightsZobristC [4]uint64
+var castleRightsZobristC [NColors][NSides]uint64
 var whiteToMoveZobristC uint64 // active if white is to move
 
 const kDefaultMoveListLength int = 65
