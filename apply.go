@@ -11,38 +11,34 @@ func (b *Board) Apply(m Move) func() {
 	return b.Apply2(m).Unapply
 }
 
+// Add this to the e.p. square to find the captured pawn for each colour
+var epDeltas = [NColors]int8 {-8, 8}
+
+var startingRankBbs = [NColors]uint64 {onlyRank[0], onlyRank[7]}
+
+var piecesPawnZobristIndexes = [NColors]int {0, 6}
+
 // Applies a move to the board, and returns move application information and a function that can be used to unapply it.
 // This function assumes that the given move is valid (i.e., is in the set of moves found by GenerateLegalMoves()).
 // If the move is not valid, this function has undefined behavior.
 func (b *Board) Apply2(m Move) *MoveApplication {
 	var moveApplication MoveApplication
 	moveApplication.Move = m
+
+	ourCol := b.Colortomove
+	oppCol := oppColor(ourCol)
 	
 	// Configure data about which pieces move
-	var ourBitboardPtr, oppBitboardPtr *Bitboards
-	var epDelta int8                                // add this to the e.p. square to find the captured pawn
-	var oppStartingRankBb, ourStartingRankBb uint64 // the starting rank of out opponent's major pieces
+	ourBitboardPtr, oppBitboardPtr := &b.Bitboards[ourCol], &b.Bitboards[oppCol]
+	epDelta := epDeltas[ourCol] // add this to the e.p. square to find the captured pawn
+	ourStartingRankBb, oppStartingRankBb := startingRankBbs[ourCol], startingRankBbs[oppCol] // the starting rank of each side
 	// the constant that represents the index into pieceSquareZobristC for the pawn of our color
-	var ourPiecesPawnZobristIndex int
-	var oppPiecesPawnZobristIndex int
-	if b.Wtomove {
-		ourBitboardPtr = &(b.White)
-		oppBitboardPtr = &(b.Black)
-		epDelta = -8
-		oppStartingRankBb = onlyRank[7]
-		ourStartingRankBb = onlyRank[0]
-		ourPiecesPawnZobristIndex = 0
-		oppPiecesPawnZobristIndex = 6
-	} else {
-		ourBitboardPtr = &(b.Black)
-		oppBitboardPtr = &(b.White)
-		epDelta = 8
-		oppStartingRankBb = onlyRank[0]
-		ourStartingRankBb = onlyRank[7]
+	ourPiecesPawnZobristIndex, oppPiecesPawnZobristIndex := piecesPawnZobristIndexes[ourCol], piecesPawnZobristIndexes[oppCol]
+
+	if b.Colortomove == Black {
 		b.Fullmoveno++ // increment after black's move
-		ourPiecesPawnZobristIndex = 6
-		oppPiecesPawnZobristIndex = 0
 	}
+
 	fromBitboard := (uint64(1) << m.From())
 	toBitboard := (uint64(1) << m.To())
 	pieceType, pieceTypeBitboard := determinePieceType(b, ourBitboardPtr, fromBitboard, m.From())
@@ -181,7 +177,8 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	}
 	// flip the side to move in the hash
 	b.hash ^= whiteToMoveZobristC
-	b.Wtomove = !b.Wtomove
+	//b.Wtomove = !b.Wtomove
+	b.Colortomove = oppColor(b.Colortomove)
 
 	// remove the old en passant square from the hash, and add the new one
 	b.hash ^= uint64(oldEpCaptureSquare)
@@ -191,7 +188,8 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	moveApplication.Unapply = func() {
 		// Flip the player to move
 		b.hash ^= whiteToMoveZobristC
-		b.Wtomove = !b.Wtomove
+		//b.Wtomove = !b.Wtomove
+		b.Colortomove = oppColor(b.Colortomove)
 
 		// Restore the halfmove clock
 		if resetHalfmoveClockFrom == -1 {
@@ -232,7 +230,7 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		}
 
 		// Decrement move clock
-		if !b.Wtomove {
+		if /*!b.Wtomove*/b.Colortomove == Black {
 			b.Fullmoveno-- // decrement after undoing black's move
 		}
 
@@ -276,13 +274,15 @@ func (b *Board) ApplyNullMove2() MoveApplication {
 
 	// flip the side to move in the hash
 	b.hash ^= whiteToMoveZobristC
-	b.Wtomove = !b.Wtomove
+	// b.Wtomove = !b.Wtomove
+	b.Colortomove = oppColor(b.Colortomove)
 
 	// Generate the unapply function (closure)
 	moveInfo.Unapply = func() {
 		// Flip the player to move
 		b.hash ^= whiteToMoveZobristC
-		b.Wtomove = !b.Wtomove
+		// b.Wtomove = !b.Wtomove
+		b.Colortomove = oppColor(b.Colortomove)
 
 		// Unapply en-passant square change
 		b.hash ^= uint64(oldEpCaptureSquare) // restore the old one to the hash

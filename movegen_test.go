@@ -61,7 +61,7 @@ func TestKnightPosition0(t *testing.T) {
 
 	whitepieces := Bitboards{Pawns: whitePawns, Knights: whiteKnights, All: whitePawns | whiteKnights}
 	blackpieces := Bitboards{Pawns: blackPawns, Knights: blackKnights, All: blackPawns | blackKnights}
-	testboard := Board{White: whitepieces, Black: blackpieces, Wtomove: true}
+	testboard := Board{Bitboards: [NColors]Bitboards {whitepieces, blackpieces}, Colortomove: White}
 
 	moves := make([]Move, 0, 45)
 	testboard.knightMoves(&moves, everything, everything)
@@ -69,7 +69,7 @@ func TestKnightPosition0(t *testing.T) {
 		t.Error("Knight moves: wrong length. Expected 20, got", len(moves))
 	}
 
-	testboard.Wtomove = false
+	testboard.Colortomove = Black
 	moves2 := make([]Move, 0, 45)
 	testboard.knightMoves(&moves2, everything, everything)
 	if len(moves2) != 27 {

@@ -1,5 +1,17 @@
 package dragontoothmg
 
+type ColorT uint8
+
+const (
+	White ColorT = iota
+	Black
+	NColors
+)
+
+func oppColor(color ColorT) ColorT {
+	return Black ^ color
+}
+
 // Each bitboard shall use little-endian rank-file mapping:
 // 56  57  58  59  60  61  62  63
 // 48  49  50  51  52  53  54  55
@@ -15,15 +27,25 @@ package dragontoothmg
 
 // The board type, which uses little-endian rank-file mapping.
 type Board struct {
-	Wtomove       bool
+	Colortomove ColorT
+	//Wtomove       bool
 	enpassant     uint8 // square id (16-23 or 40-47) where en passant capture is possible
-	castlerights  uint8
+	castlerights  uint8 // TODO - make per-color array
 	Halfmoveclock uint8
 	Fullmoveno    uint16
-	White         Bitboards
-	Black         Bitboards
+	Bitboards     [NColors]Bitboards // indexed by color
+	// White         Bitboards
+	// Black         Bitboards
 	pieces        [64]Piece // maps position->piece-type
 	hash          uint64
+}
+
+func (b *Board) ourBitboards() *Bitboards {
+	return &b.Bitboards[b.Colortomove]
+}
+
+func (b *Board) oppBitboards() *Bitboards {
+	return &b.Bitboards[oppColor(b.Colortomove)]
 }
 
 func bitSet(bits uint64, pos uint8) bool {
@@ -38,19 +60,19 @@ func (b *Board) isConsistent() (bool, uint8) {
 		pieceOk := true
 		switch piece {
 		case Nothing:
-			pieceOk = bitSet(^(b.White.All | b.Black.All), i)
+			pieceOk = bitSet(^(b.Bitboards[White].All | b.Bitboards[Black].All), i)
 		case Pawn:
-			pieceOk = bitSet((b.White.Pawns | b.Black.Pawns), i)
+			pieceOk = bitSet((b.Bitboards[White].Pawns | b.Bitboards[Black].Pawns), i)
 		case Knight:
-			pieceOk = bitSet((b.White.Knights | b.Black.Knights), i)
+			pieceOk = bitSet((b.Bitboards[White].Knights | b.Bitboards[Black].Knights), i)
 		case Bishop:
-			pieceOk = bitSet((b.White.Bishops | b.Black.Bishops), i)
+			pieceOk = bitSet((b.Bitboards[White].Bishops | b.Bitboards[Black].Bishops), i)
 		case Rook:
-			pieceOk = bitSet((b.White.Rooks | b.Black.Rooks), i)
+			pieceOk = bitSet((b.Bitboards[White].Rooks | b.Bitboards[Black].Rooks), i)
 		case Queen:
-			pieceOk = bitSet((b.White.Queens | b.Black.Queens), i)
+			pieceOk = bitSet((b.Bitboards[White].Queens | b.Bitboards[Black].Queens), i)
 		case King:
-			pieceOk = bitSet((b.White.Kings | b.Black.Kings), i)
+			pieceOk = bitSet((b.Bitboards[White].Kings | b.Bitboards[Black].Kings), i)
 		default:
 			pieceOk = false
 		}
@@ -117,28 +139,28 @@ func (b *Board) blackCanCastleKingside() bool {
 	return (b.castlerights&0x8)>>3 == 1
 }
 func (b *Board) canCastleQueenside() bool {
-	if b.Wtomove {
+	if b.Colortomove == White {
 		return b.whiteCanCastleQueenside()
 	} else {
 		return b.blackCanCastleQueenside()
 	}
 }
 func (b *Board) canCastleKingside() bool {
-	if b.Wtomove {
+	if b.Colortomove == White {
 		return b.whiteCanCastleKingside()
 	} else {
 		return b.blackCanCastleKingside()
 	}
 }
 func (b *Board) oppCanCastleQueenside() bool {
-	if b.Wtomove {
+	if b.Colortomove == White {
 		return b.blackCanCastleQueenside()
 	} else {
 		return b.whiteCanCastleQueenside()
 	}
 }
 func (b *Board) oppCanCastleKingside() bool {
-	if b.Wtomove {
+	if b.Colortomove == White {
 		return b.blackCanCastleKingside()
 	} else {
 		return b.whiteCanCastleKingside()
@@ -161,28 +183,28 @@ func (b *Board) flipBlackKingsideCastle() {
 	b.hash ^= castleRightsZobristC[2]
 }
 func (b *Board) flipQueensideCastle() {
-	if b.Wtomove {
+	if b.Colortomove == White {
 		b.flipWhiteQueensideCastle()
 	} else {
 		b.flipBlackQueensideCastle()
 	}
 }
 func (b *Board) flipKingsideCastle() {
-	if b.Wtomove {
+	if b.Colortomove == White {
 		b.flipWhiteKingsideCastle()
 	} else {
 		b.flipBlackKingsideCastle()
 	}
 }
 func (b *Board) flipOppQueensideCastle() {
-	if b.Wtomove {
+	if b.Colortomove == White {
 		b.flipBlackQueensideCastle()
 	} else {
 		b.flipWhiteQueensideCastle()
 	}
 }
 func (b *Board) flipOppKingsideCastle() {
-	if b.Wtomove {
+	if b.Colortomove == White {
 		b.flipBlackKingsideCastle()
 	} else {
 		b.flipWhiteKingsideCastle()
@@ -190,11 +212,11 @@ func (b *Board) flipOppKingsideCastle() {
 }
 
 func (b *Board) isWhitePieceAt(pos uint8) bool {
-	return b.White.All & (uint64(1) << pos) != 0
+	return b.Bitboards[White].All & (uint64(1) << pos) != 0
 }
 
 func (b *Board) isBlackPieceAt(pos uint8) bool {
-	return b.Black.All & (uint64(1) << pos) != 0
+	return b.Bitboards[Black].All & (uint64(1) << pos) != 0
 }
 
 func (b *Board) PieceAt(pos uint8) Piece {

@@ -80,7 +80,7 @@ func parseFenAndValidate(t *testing.T, fen string) Board {
 
 func TestParseFen(t *testing.T) {
 	b := parseFenAndValidate(t, "1Q2rk2/2p2p2/1n4b1/N7/2B1Pp1q/2B4P/1QPP4/4K2R b K e3 4 30")
-	if b.Wtomove {
+	if b.Colortomove == White {
 		t.Error("Error parsing FEN")
 	}
 	if b.enpassant != 20 {
@@ -98,16 +98,16 @@ func TestParseFen(t *testing.T) {
 	if b.blackCanCastleQueenside() {
 		t.Error("Error parsing FEN")
 	}
-	if b.White.Kings != 1<<4 {
+	if b.Bitboards[White].Kings != 1<<4 {
 		t.Error("Error parsing FEN")
 	}
-	if b.Black.Kings != 1<<61 {
+	if b.Bitboards[Black].Kings != 1<<61 {
 		t.Error("Error parsing FEN")
 	}
-	if b.White.Rooks != 1<<7 {
+	if b.Bitboards[White].Rooks != 1<<7 {
 		t.Error("Error parsing FEN")
 	}
-	if b.White.Knights != 1<<32 {
+	if b.Bitboards[White].Knights != 1<<32 {
 		t.Error("Error parsing FEN")
 	}
 	if b.Halfmoveclock != 4 {

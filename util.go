@@ -10,7 +10,7 @@ import (
 
 func recomputeBoardHash(b *Board) uint64 {
 	var hash uint64 = 0
-	if b.Wtomove {
+	if b.Colortomove == White {
 		hash ^= whiteToMoveZobristC
 	}
 	if b.whiteCanCastleKingside() {
@@ -28,10 +28,10 @@ func recomputeBoardHash(b *Board) uint64 {
 	hash ^= uint64(b.enpassant)
 	for i := uint8(0); i < 64; i++ {
 		if b.isWhitePieceAt(i) {
-			whitePiece, _ := determinePieceType(b, &(b.White), uint64(1)<<i, i)
+			whitePiece, _ := determinePieceType(b, &(b.Bitboards[White]), uint64(1)<<i, i)
  			hash ^= pieceSquareZobristC[whitePiece-1][i]
 		} else if b.isBlackPieceAt(i) {
-			blackPiece, _ := determinePieceType(b, &(b.Black), uint64(1)<<i, i)
+			blackPiece, _ := determinePieceType(b, &(b.Bitboards[Black]), uint64(1)<<i, i)
 			hash ^= pieceSquareZobristC[blackPiece+5][i]
 		}
 	}
@@ -40,12 +40,12 @@ func recomputeBoardHash(b *Board) uint64 {
 
 func IsCapture(m Move, b *Board) bool {
 	toBitboard := (uint64(1) << m.To())
-	if (toBitboard&b.White.All != 0) || (toBitboard&b.Black.All != 0) {
+	if (toBitboard&b.Bitboards[White].All != 0) || (toBitboard&b.Bitboards[Black].All != 0) {
 		return true
 	}
 	// Is it an en passant capture?
 	fromBitboard := (uint64(1) << m.From())
-	originIsPawn := fromBitboard&b.White.Pawns != 0 || fromBitboard&b.Black.Pawns != 0
+	originIsPawn := fromBitboard&b.Bitboards[White].Pawns != 0 || fromBitboard&b.Bitboards[Black].Pawns != 0
 	return originIsPawn && (toBitboard&(uint64(1) << b.enpassant) != 0)
 }
 
@@ -152,8 +152,8 @@ func IndexToAlgebraic(id Square) string {
 
 // Serializes a board position to a Fen string.
 func (b *Board) ToFen() string {
-	b.White.sanityCheck()
-	b.Black.sanityCheck()
+	b.Bitboards[White].sanityCheck()
+	b.Bitboards[Black].sanityCheck()
 	var position string
 	var empty int // empty slots
 	for i := 63; i >= 0; i-- {
@@ -163,29 +163,29 @@ func (b *Board) ToFen() string {
 		currMask = 1 << uint64(currIdx)
 
 		toprint := ""
-		if b.White.Pawns&currMask != 0 {
+		if b.Bitboards[White].Pawns&currMask != 0 {
 			toprint += "P"
-		} else if b.White.Knights&currMask != 0 {
+		} else if b.Bitboards[White].Knights&currMask != 0 {
 			toprint += "N"
-		} else if b.White.Bishops&currMask != 0 {
+		} else if b.Bitboards[White].Bishops&currMask != 0 {
 			toprint += "B"
-		} else if b.White.Rooks&currMask != 0 {
+		} else if b.Bitboards[White].Rooks&currMask != 0 {
 			toprint += "R"
-		} else if b.White.Queens&currMask != 0 {
+		} else if b.Bitboards[White].Queens&currMask != 0 {
 			toprint += "Q"
-		} else if b.White.Kings&currMask != 0 {
+		} else if b.Bitboards[White].Kings&currMask != 0 {
 			toprint += "K"
-		} else if b.Black.Pawns&currMask != 0 {
+		} else if b.Bitboards[Black].Pawns&currMask != 0 {
 			toprint += "p"
-		} else if b.Black.Knights&currMask != 0 {
+		} else if b.Bitboards[Black].Knights&currMask != 0 {
 			toprint += "n"
-		} else if b.Black.Bishops&currMask != 0 {
+		} else if b.Bitboards[Black].Bishops&currMask != 0 {
 			toprint += "b"
-		} else if b.Black.Rooks&currMask != 0 {
+		} else if b.Bitboards[Black].Rooks&currMask != 0 {
 			toprint += "r"
-		} else if b.Black.Queens&currMask != 0 {
+		} else if b.Bitboards[Black].Queens&currMask != 0 {
 			toprint += "q"
-		} else if b.Black.Kings&currMask != 0 {
+		} else if b.Bitboards[Black].Kings&currMask != 0 {
 			toprint += "k"
 		} else {
 			empty++
@@ -208,7 +208,7 @@ func (b *Board) ToFen() string {
 			}
 		}
 	}
-	if b.Wtomove {
+	if b.Colortomove == White {
 		position += " w"
 	} else {
 		position += " b"
@@ -271,35 +271,39 @@ func ParseFen(fen string) Board {
 	for i := uint8(0); i < 64; i++ {
 		switch tokens[0][i] {
 		case 'p':
-			b.addPiece(Pawn, i, &b.Black.Pawns, &b.Black.All)
+			b.addPiece(Pawn, i, &b.Bitboards[Black].Pawns, &b.Bitboards[Black].All)
 		case 'n':
-			b.addPiece(Knight, i, &b.Black.Knights, &b.Black.All)
+			b.addPiece(Knight, i, &b.Bitboards[Black].Knights, &b.Bitboards[Black].All)
 		case 'b':
-			b.addPiece(Bishop, i, &b.Black.Bishops, &b.Black.All)
+			b.addPiece(Bishop, i, &b.Bitboards[Black].Bishops, &b.Bitboards[Black].All)
 		case 'r':
-			b.addPiece(Rook, i, &b.Black.Rooks, &b.Black.All)
+			b.addPiece(Rook, i, &b.Bitboards[Black].Rooks, &b.Bitboards[Black].All)
 		case 'q':
-			b.addPiece(Queen, i, &b.Black.Queens, &b.Black.All)
+			b.addPiece(Queen, i, &b.Bitboards[Black].Queens, &b.Bitboards[Black].All)
 		case 'k':
-			b.addPiece(King, i, &b.Black.Kings, &b.Black.All)
+			b.addPiece(King, i, &b.Bitboards[Black].Kings, &b.Bitboards[Black].All)
 		case 'P':
-			b.addPiece(Pawn, i, &b.White.Pawns, &b.White.All)
+			b.addPiece(Pawn, i, &b.Bitboards[White].Pawns, &b.Bitboards[White].All)
 		case 'N':
-			b.addPiece(Knight, i, &b.White.Knights, &b.White.All)
+			b.addPiece(Knight, i, &b.Bitboards[White].Knights, &b.Bitboards[White].All)
 		case 'B':
-			b.addPiece(Bishop, i, &b.White.Bishops, &b.White.All)
+			b.addPiece(Bishop, i, &b.Bitboards[White].Bishops, &b.Bitboards[White].All)
 		case 'R':
-			b.addPiece(Rook, i, &b.White.Rooks, &b.White.All)
+			b.addPiece(Rook, i, &b.Bitboards[White].Rooks, &b.Bitboards[White].All)
 		case 'Q':
-			b.addPiece(Queen, i, &b.White.Queens, &b.White.All)
+			b.addPiece(Queen, i, &b.Bitboards[White].Queens, &b.Bitboards[White].All)
 		case 'K':
-			b.addPiece(King, i, &b.White.Kings, &b.White.All)
+			b.addPiece(King, i, &b.Bitboards[White].Kings, &b.Bitboards[White].All)
 		}
 	}
-	//b.White.All = b.White.Pawns | b.White.Knights | b.White.Bishops | b.White.Rooks | b.White.Queens | b.White.Kings
-	//b.Black.All = b.Black.Pawns | b.Black.Knights | b.Black.Bishops | b.Black.Rooks | b.Black.Queens | b.Black.Kings
+	//b.Bitboards[White].All = b.Bitboards[White].Pawns | b.Bitboards[White].Knights | b.Bitboards[White].Bishops | b.Bitboards[White].Rooks | b.Bitboards[White].Queens | b.Bitboards[White].Kings
+	//b.Bitboards[Black].All = b.Bitboards[Black].Pawns | b.Bitboards[Black].Knights | b.Bitboards[Black].Bishops | b.Bitboards[Black].Rooks | b.Bitboards[Black].Queens | b.Bitboards[Black].Kings
 
-	b.Wtomove = tokens[1] == "w" || tokens[1] == "W"
+	if tokens[1] == "w" || tokens[1] == "W" {
+		b.Colortomove = White
+	} else {
+		b.Colortomove = Black
+	}
 	if strings.Contains(tokens[2], "K") {
 		b.flipWhiteKingsideCastle()
 	}
