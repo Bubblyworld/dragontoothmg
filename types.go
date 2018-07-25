@@ -28,6 +28,8 @@ func toFlag(side CastleRightsT) CastleRightsFlagsT {
 	return CastleRightsFlagsT(1) << side
 }
 
+// TODO type BitBoardT uint64
+
 // Each bitboard shall use little-endian rank-file mapping:
 // 56  57  58  59  60  61  62  63
 // 48  49  50  51  52  53  54  55
@@ -48,17 +50,17 @@ type Board struct {
 	Halfmoveclock uint8
 	castlerights  [NColors]CastleRightsFlagsT
 	Fullmoveno    uint16
-	Bitboards     [NColors]Bitboards // indexed by color
+	Bbs           [NColors]Bitboards // indexed by color
 	pieces        [64]Piece // maps position->piece-type
 	hash          uint64
 }
 
 func (b *Board) ourBitboards() *Bitboards {
-	return &b.Bitboards[b.Colortomove]
+	return &b.Bbs[b.Colortomove]
 }
 
 func (b *Board) oppBitboards() *Bitboards {
-	return &b.Bitboards[oppColor(b.Colortomove)]
+	return &b.Bbs[oppColor(b.Colortomove)]
 }
 
 func bitSet(bits uint64, pos uint8) bool {
@@ -73,19 +75,19 @@ func (b *Board) isConsistent() (bool, uint8) {
 		pieceOk := true
 		switch piece {
 		case Nothing:
-			pieceOk = bitSet(^(b.Bitboards[White].All | b.Bitboards[Black].All), i)
+			pieceOk = bitSet(^(b.Bbs[White].All | b.Bbs[Black].All), i)
 		case Pawn:
-			pieceOk = bitSet((b.Bitboards[White].Pawns | b.Bitboards[Black].Pawns), i)
+			pieceOk = bitSet((b.Bbs[White].Pawns | b.Bbs[Black].Pawns), i)
 		case Knight:
-			pieceOk = bitSet((b.Bitboards[White].Knights | b.Bitboards[Black].Knights), i)
+			pieceOk = bitSet((b.Bbs[White].Knights | b.Bbs[Black].Knights), i)
 		case Bishop:
-			pieceOk = bitSet((b.Bitboards[White].Bishops | b.Bitboards[Black].Bishops), i)
+			pieceOk = bitSet((b.Bbs[White].Bishops | b.Bbs[Black].Bishops), i)
 		case Rook:
-			pieceOk = bitSet((b.Bitboards[White].Rooks | b.Bitboards[Black].Rooks), i)
+			pieceOk = bitSet((b.Bbs[White].Rooks | b.Bbs[Black].Rooks), i)
 		case Queen:
-			pieceOk = bitSet((b.Bitboards[White].Queens | b.Bitboards[Black].Queens), i)
+			pieceOk = bitSet((b.Bbs[White].Queens | b.Bbs[Black].Queens), i)
 		case King:
-			pieceOk = bitSet((b.Bitboards[White].Kings | b.Bitboards[Black].Kings), i)
+			pieceOk = bitSet((b.Bbs[White].Kings | b.Bbs[Black].Kings), i)
 		default:
 			pieceOk = false
 		}
@@ -159,11 +161,11 @@ func (b *Board) flipOppCastleRights(side CastleRightsT) {
 }
 
 func (b *Board) isWhitePieceAt(pos uint8) bool {
-	return b.Bitboards[White].All & (uint64(1) << pos) != 0
+	return b.Bbs[White].All & (uint64(1) << pos) != 0
 }
 
 func (b *Board) isBlackPieceAt(pos uint8) bool {
-	return b.Bitboards[Black].All & (uint64(1) << pos) != 0
+	return b.Bbs[Black].All & (uint64(1) << pos) != 0
 }
 
 func (b *Board) PieceAt(pos uint8) Piece {
@@ -260,7 +262,7 @@ type Square uint8
 type Piece uint8
 
 const (
-	Nothing = iota
+	Nothing Piece = iota
 	Pawn
 	Knight // list before bishop for promotion loops
 	Bishop
@@ -269,6 +271,9 @@ const (
 	King
 	NoPieces
 )
+
+const All = NoPieces
+const NoPiecesWithAll Piece = NoPieces+1
 
 // Move application data
 type MoveApplication struct {

@@ -22,6 +22,10 @@ var piecesPawnZobristIndexes = [NColors]int {0, 6}
 // This function assumes that the given move is valid (i.e., is in the set of moves found by GenerateLegalMoves()).
 // If the move is not valid, this function has undefined behavior.
 func (b *Board) Apply2(m Move) *MoveApplication {
+	// if false {
+	// 	saveBoard := *b
+	// }
+	
 	var moveApplication MoveApplication
 	moveApplication.Move = m
 
@@ -29,15 +33,14 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	oppCol := oppColor(ourCol)
 	
 	// Configure data about which pieces move
-	ourBitboardPtr, oppBitboardPtr := &b.Bitboards[ourCol], &b.Bitboards[oppCol]
+	ourBitboardPtr, oppBitboardPtr := &b.Bbs[ourCol], &b.Bbs[oppCol]
 	epDelta := epDeltas[ourCol] // add this to the e.p. square to find the captured pawn
 	ourStartingRankBb, oppStartingRankBb := startingRankBbs[ourCol], startingRankBbs[oppCol] // the starting rank of each side
 	// the constant that represents the index into pieceSquareZobristC for the pawn of our color
 	ourPiecesPawnZobristIndex, oppPiecesPawnZobristIndex := piecesPawnZobristIndexes[ourCol], piecesPawnZobristIndexes[oppCol]
 
-	if b.Colortomove == Black {
-		b.Fullmoveno++ // increment after black's move
-	}
+	// increment after black's move
+	b.Fullmoveno += uint16(ourCol) 
 
 	fromBitboard := (uint64(1) << m.From())
 	toBitboard := (uint64(1) << m.To())
@@ -101,8 +104,9 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		b.movePiece(Rook, Rook, oldRookLoc, newRookLoc, &ourBitboardPtr.Rooks, &ourBitboardPtr.Rooks, &ourBitboardPtr.All) // ??? Flumoxed
 		// Update rook location in hash
 		// (Rook - 1) assumes that "Nothing" precedes "Rook" in the Piece constants list
-		b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(Rook-1)][oldRookLoc]
-		b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(Rook-1)][newRookLoc]
+		// TODO RPJ - since the above assertion re Rook and Nothing is false, this is dubious
+		b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][oldRookLoc]
+		b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][newRookLoc]
 
 		moveApplication.IsCastling = true
 		moveApplication.RookCastleFrom = oldRookLoc
@@ -186,6 +190,17 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 
 	// Generate the unapply function (closure)
 	moveApplication.Unapply = func() {
+		// TODO - remove closure; it's cute but not entirely ideal
+		// TODO - just save/restore hash rather than manually rewinding it
+		// TODO - ditto castling rights
+		// TODO - ditto ep
+		// TODO - simplify to just plain bitboard and piece-board reversions
+		// TODO - in fact we could just copy the whole struct Board :D - it's only ~128 bytes (mmm, actually more like 200 with piece board)
+		if false {
+			*b = saveBoard
+			return
+		}
+		
 		// Flip the player to move
 		b.hash ^= whiteToMoveZobristC
 		//b.Wtomove = !b.Wtomove
@@ -214,8 +229,8 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		if castleStatus != 0 {
 			b.movePiece(Rook, Rook, newRookLoc, oldRookLoc, &ourBitboardPtr.Rooks, &ourBitboardPtr.Rooks, &ourBitboardPtr.All) // ??? Flumoxed
 			// Revert castling rook move
-			b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(Rook-1)][oldRookLoc]
-			b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(Rook-1)][newRookLoc]
+			b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][oldRookLoc]
+			b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][newRookLoc]
 		}
 
 		// Unapply en-passant square change, and capture if necessary
@@ -229,10 +244,8 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 			b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex][epOpponentPawnLocation]
 		}
 
-		// Decrement move clock
-		if /*!b.Wtomove*/b.Colortomove == Black {
-			b.Fullmoveno-- // decrement after undoing black's move
-		}
+		// Decrement move clock - decrement after undoing black's move
+		b.Fullmoveno -= uint16(ourCol)
 
 		// Restore castling flags
 		// Must update castling flags AFTER turn swap

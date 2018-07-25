@@ -61,7 +61,7 @@ func TestKnightPosition0(t *testing.T) {
 
 	whitepieces := Bitboards{Pawns: whitePawns, Knights: whiteKnights, All: whitePawns | whiteKnights}
 	blackpieces := Bitboards{Pawns: blackPawns, Knights: blackKnights, All: blackPawns | blackKnights}
-	testboard := Board{Bitboards: [NColors]Bitboards {whitepieces, blackpieces}, Colortomove: White}
+	testboard := Board{Bbs: [NColors]Bitboards {whitepieces, blackpieces}, Colortomove: White}
 
 	moves := make([]Move, 0, 45)
 	testboard.knightMoves(&moves, everything, everything)
