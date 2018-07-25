@@ -59,8 +59,14 @@ func TestKnightPosition0(t *testing.T) {
 	// 0000000000000000000000100010000000000001000010000100000000000000
 	var blackKnights uint64 = 0x22001084000
 
-	whitepieces := Bitboards{Pawns: whitePawns, Knights: whiteKnights, All: whitePawns | whiteKnights}
-	blackpieces := Bitboards{Pawns: blackPawns, Knights: blackKnights, All: blackPawns | blackKnights}
+	var whitepieces Bitboards
+	whitepieces[Pawn] = whitePawns
+	whitepieces[Knight] = whiteKnights
+	whitepieces[All] = whitePawns | whiteKnights
+	var blackpieces Bitboards
+	blackpieces[Pawn] = blackPawns
+	blackpieces[Knight] = blackKnights
+	blackpieces[All] = blackPawns | blackKnights
 	testboard := Board{Bbs: [NColors]Bitboards {whitepieces, blackpieces}, Colortomove: White}
 
 	moves := make([]Move, 0, 45)

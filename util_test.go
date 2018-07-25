@@ -98,16 +98,16 @@ func TestParseFen(t *testing.T) {
 	if b.canCastle(Black, Queenside) {
 		t.Error("Error parsing FEN")
 	}
-	if b.Bbs[White].Kings != 1<<4 {
+	if b.Bbs[White][King] != 1<<4 {
 		t.Error("Error parsing FEN")
 	}
-	if b.Bbs[Black].Kings != 1<<61 {
+	if b.Bbs[Black][King] != 1<<61 {
 		t.Error("Error parsing FEN")
 	}
-	if b.Bbs[White].Rooks != 1<<7 {
+	if b.Bbs[White][Rook] != 1<<7 {
 		t.Error("Error parsing FEN")
 	}
-	if b.Bbs[White].Knights != 1<<32 {
+	if b.Bbs[White][Knight] != 1<<32 {
 		t.Error("Error parsing FEN")
 	}
 	if b.Halfmoveclock != 4 {

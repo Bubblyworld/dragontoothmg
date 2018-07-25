@@ -40,12 +40,12 @@ func recomputeBoardHash(b *Board) uint64 {
 
 func IsCapture(m Move, b *Board) bool {
 	toBitboard := (uint64(1) << m.To())
-	if (toBitboard&b.Bbs[White].All != 0) || (toBitboard&b.Bbs[Black].All != 0) {
+	if (toBitboard&b.Bbs[White][All] != 0) || (toBitboard&b.Bbs[Black][All] != 0) {
 		return true
 	}
 	// Is it an en passant capture?
 	fromBitboard := (uint64(1) << m.From())
-	originIsPawn := fromBitboard&b.Bbs[White].Pawns != 0 || fromBitboard&b.Bbs[Black].Pawns != 0
+	originIsPawn := fromBitboard&b.Bbs[White][Pawn] != 0 || fromBitboard&b.Bbs[Black][Pawn] != 0
 	return originIsPawn && (toBitboard&(uint64(1) << b.enpassant) != 0)
 }
 
@@ -56,10 +56,10 @@ func parseMove(movestr string) Move {
 }
 
 func (b *Bitboards) sanityCheck() {
-	if b.All != b.Pawns|b.Knights|b.Bishops|b.Rooks|b.Kings|b.Queens {
+	if b[All] != b[Pawn]|b[Knight]|b[Bishop]|b[Rook]|b[King]|b[Queen] {
 		fmt.Println("Bitboard sanity check problem.")
 	}
-	if ((((((b.All ^ b.Pawns) ^ b.Knights) ^ b.Bishops) ^ b.Rooks) ^ b.Kings) ^ b.Queens) != 0 {
+	if ((((((b[All] ^ b[Pawn]) ^ b[Knight]) ^ b[Bishop]) ^ b[Rook]) ^ b[King]) ^ b[Queen]) != 0 {
 		fmt.Println("Bitboard sanity check problem.")
 	}
 }
@@ -163,29 +163,29 @@ func (b *Board) ToFen() string {
 		currMask = 1 << uint64(currIdx)
 
 		toprint := ""
-		if b.Bbs[White].Pawns&currMask != 0 {
+		if b.Bbs[White][Pawn]&currMask != 0 {
 			toprint += "P"
-		} else if b.Bbs[White].Knights&currMask != 0 {
+		} else if b.Bbs[White][Knight]&currMask != 0 {
 			toprint += "N"
-		} else if b.Bbs[White].Bishops&currMask != 0 {
+		} else if b.Bbs[White][Bishop]&currMask != 0 {
 			toprint += "B"
-		} else if b.Bbs[White].Rooks&currMask != 0 {
+		} else if b.Bbs[White][Rook]&currMask != 0 {
 			toprint += "R"
-		} else if b.Bbs[White].Queens&currMask != 0 {
+		} else if b.Bbs[White][Queen]&currMask != 0 {
 			toprint += "Q"
-		} else if b.Bbs[White].Kings&currMask != 0 {
+		} else if b.Bbs[White][King]&currMask != 0 {
 			toprint += "K"
-		} else if b.Bbs[Black].Pawns&currMask != 0 {
+		} else if b.Bbs[Black][Pawn]&currMask != 0 {
 			toprint += "p"
-		} else if b.Bbs[Black].Knights&currMask != 0 {
+		} else if b.Bbs[Black][Knight]&currMask != 0 {
 			toprint += "n"
-		} else if b.Bbs[Black].Bishops&currMask != 0 {
+		} else if b.Bbs[Black][Bishop]&currMask != 0 {
 			toprint += "b"
-		} else if b.Bbs[Black].Rooks&currMask != 0 {
+		} else if b.Bbs[Black][Rook]&currMask != 0 {
 			toprint += "r"
-		} else if b.Bbs[Black].Queens&currMask != 0 {
+		} else if b.Bbs[Black][Queen]&currMask != 0 {
 			toprint += "q"
-		} else if b.Bbs[Black].Kings&currMask != 0 {
+		} else if b.Bbs[Black][King]&currMask != 0 {
 			toprint += "k"
 		} else {
 			empty++
@@ -271,33 +271,33 @@ func ParseFen(fen string) Board {
 	for i := uint8(0); i < 64; i++ {
 		switch tokens[0][i] {
 		case 'p':
-			b.addPiece(Pawn, i, &b.Bbs[Black].Pawns, &b.Bbs[Black].All)
+			b.addPiece(Pawn, i, &b.Bbs[Black][Pawn], &b.Bbs[Black][All])
 		case 'n':
-			b.addPiece(Knight, i, &b.Bbs[Black].Knights, &b.Bbs[Black].All)
+			b.addPiece(Knight, i, &b.Bbs[Black][Knight], &b.Bbs[Black][All])
 		case 'b':
-			b.addPiece(Bishop, i, &b.Bbs[Black].Bishops, &b.Bbs[Black].All)
+			b.addPiece(Bishop, i, &b.Bbs[Black][Bishop], &b.Bbs[Black][All])
 		case 'r':
-			b.addPiece(Rook, i, &b.Bbs[Black].Rooks, &b.Bbs[Black].All)
+			b.addPiece(Rook, i, &b.Bbs[Black][Rook], &b.Bbs[Black][All])
 		case 'q':
-			b.addPiece(Queen, i, &b.Bbs[Black].Queens, &b.Bbs[Black].All)
+			b.addPiece(Queen, i, &b.Bbs[Black][Queen], &b.Bbs[Black][All])
 		case 'k':
-			b.addPiece(King, i, &b.Bbs[Black].Kings, &b.Bbs[Black].All)
+			b.addPiece(King, i, &b.Bbs[Black][King], &b.Bbs[Black][All])
 		case 'P':
-			b.addPiece(Pawn, i, &b.Bbs[White].Pawns, &b.Bbs[White].All)
+			b.addPiece(Pawn, i, &b.Bbs[White][Pawn], &b.Bbs[White][All])
 		case 'N':
-			b.addPiece(Knight, i, &b.Bbs[White].Knights, &b.Bbs[White].All)
+			b.addPiece(Knight, i, &b.Bbs[White][Knight], &b.Bbs[White][All])
 		case 'B':
-			b.addPiece(Bishop, i, &b.Bbs[White].Bishops, &b.Bbs[White].All)
+			b.addPiece(Bishop, i, &b.Bbs[White][Bishop], &b.Bbs[White][All])
 		case 'R':
-			b.addPiece(Rook, i, &b.Bbs[White].Rooks, &b.Bbs[White].All)
+			b.addPiece(Rook, i, &b.Bbs[White][Rook], &b.Bbs[White][All])
 		case 'Q':
-			b.addPiece(Queen, i, &b.Bbs[White].Queens, &b.Bbs[White].All)
+			b.addPiece(Queen, i, &b.Bbs[White][Queen], &b.Bbs[White][All])
 		case 'K':
-			b.addPiece(King, i, &b.Bbs[White].Kings, &b.Bbs[White].All)
+			b.addPiece(King, i, &b.Bbs[White][King], &b.Bbs[White][All])
 		}
 	}
-	//b.Bbs[White].All = b.Bbs[White].Pawns | b.Bbs[White].Knights | b.Bbs[White].Bishops | b.Bbs[White].Rooks | b.Bbs[White].Queens | b.Bbs[White].Kings
-	//b.Bbs[Black].All = b.Bbs[Black].Pawns | b.Bbs[Black].Knights | b.Bbs[Black].Bishops | b.Bbs[Black].Rooks | b.Bbs[Black].Queens | b.Bbs[Black].Kings
+	//b.Bbs[White][All] = b.Bbs[White][Pawn] | b.Bbs[White][Knight] | b.Bbs[White][Bishop] | b.Bbs[White][Rook] | b.Bbs[White][Queen] | b.Bbs[White][King]
+	//b.Bbs[Black][All] = b.Bbs[Black][Pawn] | b.Bbs[Black][Knight] | b.Bbs[Black][Bishop] | b.Bbs[Black][Rook] | b.Bbs[Black][Queen] | b.Bbs[Black][King]
 
 	if tokens[1] == "w" || tokens[1] == "W" {
 		b.Colortomove = White

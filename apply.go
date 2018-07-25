@@ -101,7 +101,7 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 
 	// Apply the castling rook movement
 	if castleStatus != 0 {
-		b.movePiece(Rook, Rook, oldRookLoc, newRookLoc, &ourBitboardPtr.Rooks, &ourBitboardPtr.Rooks, &ourBitboardPtr.All) // ??? Flumoxed
+		b.movePiece(Rook, Rook, oldRookLoc, newRookLoc, &ourBitboardPtr[Rook], &ourBitboardPtr[Rook], &ourBitboardPtr[All]) // ??? Flumoxed
 		// Update rook location in hash
 		// (Rook - 1) assumes that "Nothing" precedes "Rook" in the Piece constants list
 		// TODO RPJ - since the above assertion re Rook and Nothing is false, this is dubious
@@ -119,7 +119,7 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	if pieceType == Pawn && m.To() == oldEpCaptureSquare && oldEpCaptureSquare != 0 {
 		actuallyPerformedEpCapture = true
 		epOpponentPawnLocation := uint8(int8(oldEpCaptureSquare) + epDelta)
-		b.removePiece(Pawn, epOpponentPawnLocation, &oppBitboardPtr.Pawns, &oppBitboardPtr.All)
+		b.removePiece(Pawn, epOpponentPawnLocation, &oppBitboardPtr[Pawn], &oppBitboardPtr[All])
 		// Remove the opponent pawn from the board hash.
 		b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex][epOpponentPawnLocation]
 		
@@ -138,16 +138,16 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	var promotedToPieceType Piece // if not promoted, same as pieceType
 	switch m.Promote() {
 	case Queen:
-		destTypeBitboard = &(ourBitboardPtr.Queens)
+		destTypeBitboard = &(ourBitboardPtr[Queen])
 		promotedToPieceType = Queen
 	case Knight:
-		destTypeBitboard = &(ourBitboardPtr.Knights)
+		destTypeBitboard = &(ourBitboardPtr[Knight])
 		promotedToPieceType = Knight
 	case Rook:
-		destTypeBitboard = &(ourBitboardPtr.Rooks)
+		destTypeBitboard = &(ourBitboardPtr[Rook])
 		promotedToPieceType = Rook
 	case Bishop:
-		destTypeBitboard = &(ourBitboardPtr.Bishops)
+		destTypeBitboard = &(ourBitboardPtr[Bishop])
 		promotedToPieceType = Bishop
 	default:
 		destTypeBitboard = pieceTypeBitboard
@@ -159,13 +159,13 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	// Apply the move - remove the captured piece first so that we don't overwrite the moved piece
 	capturedPieceType, capturedBitboard := determinePieceType(b, oppBitboardPtr, toBitboard, m.To())
 	if capturedPieceType != Nothing {   // This does not account for e.p. captures
-		b.removePiece(capturedPieceType, m.To(), capturedBitboard, &oppBitboardPtr.All)
+		b.removePiece(capturedPieceType, m.To(), capturedBitboard, &oppBitboardPtr[All])
 		b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex+(int(capturedPieceType)-1)][m.To()] // remove the captured piece from the hash - TODO (RPJ) wrong capture location for en-passant?
 		
 		moveApplication.CapturedPieceType = capturedPieceType
 		moveApplication.CaptureLocation = m.To()
 	}
-	b.movePiece(pieceType, promotedToPieceType, m.From(), m.To(), pieceTypeBitboard, destTypeBitboard, &ourBitboardPtr.All)
+	b.movePiece(pieceType, promotedToPieceType, m.From(), m.To(), pieceTypeBitboard, destTypeBitboard, &ourBitboardPtr[All])
 	b.hash ^= pieceSquareZobristC[(int(pieceType)-1)+ourPiecesPawnZobristIndex][m.From()]         // remove piece at "from"
 	b.hash ^= pieceSquareZobristC[(int(promotedToPieceType)-1)+ourPiecesPawnZobristIndex][m.To()] // add piece at "to"
 
@@ -196,10 +196,10 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		// TODO - ditto ep
 		// TODO - simplify to just plain bitboard and piece-board reversions
 		// TODO - in fact we could just copy the whole struct Board :D - it's only ~128 bytes (mmm, actually more like 200 with piece board)
-		if false {
-			*b = saveBoard
-			return
-		}
+		// if false {
+		// 	*b = saveBoard
+		// 	return
+		// }
 		
 		// Flip the player to move
 		b.hash ^= whiteToMoveZobristC
@@ -214,20 +214,20 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		}
 
 		// Unapply move - reverse of original move
-		b.movePiece(promotedToPieceType, pieceType, m.To(), m.From(), destTypeBitboard, pieceTypeBitboard, &ourBitboardPtr.All)
+		b.movePiece(promotedToPieceType, pieceType, m.To(), m.From(), destTypeBitboard, pieceTypeBitboard, &ourBitboardPtr[All])
 		b.hash ^= pieceSquareZobristC[(int(promotedToPieceType)-1)+ourPiecesPawnZobristIndex][m.To()] // remove the piece at "to"
 		b.hash ^= pieceSquareZobristC[(int(pieceType)-1)+ourPiecesPawnZobristIndex][m.From()]         // add the piece at "from"
 
 		// Restore captured piece (excluding e.p.)
 		if capturedPieceType != Nothing { // doesn't consider e.p. captures
-			b.addPiece(capturedPieceType, m.To(), capturedBitboard, &oppBitboardPtr.All)
+			b.addPiece(capturedPieceType, m.To(), capturedBitboard, &oppBitboardPtr[All])
 			// restore the captured piece to the hash (excluding e.p.)
 			b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex+(int(capturedPieceType)-1)][m.To()]
 		}
 
 		// Restore rooks from castling move
 		if castleStatus != 0 {
-			b.movePiece(Rook, Rook, newRookLoc, oldRookLoc, &ourBitboardPtr.Rooks, &ourBitboardPtr.Rooks, &ourBitboardPtr.All) // ??? Flumoxed
+			b.movePiece(Rook, Rook, newRookLoc, oldRookLoc, &ourBitboardPtr[Rook], &ourBitboardPtr[Rook], &ourBitboardPtr[All]) // ??? Flumoxed
 			// Revert castling rook move
 			b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][oldRookLoc]
 			b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][newRookLoc]
@@ -239,7 +239,7 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		b.enpassant = oldEpCaptureSquare
 		if actuallyPerformedEpCapture {
 			epOpponentPawnLocation := uint8(int8(oldEpCaptureSquare) + epDelta)
-			b.addPiece(Pawn, epOpponentPawnLocation, &oppBitboardPtr.Pawns, &oppBitboardPtr.All)
+			b.addPiece(Pawn, epOpponentPawnLocation, &oppBitboardPtr[Pawn], &oppBitboardPtr[All])
 			// Add the opponent pawn to the board hash.
 			b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex][epOpponentPawnLocation]
 		}

@@ -75,19 +75,19 @@ func (b *Board) isConsistent() (bool, uint8) {
 		pieceOk := true
 		switch piece {
 		case Nothing:
-			pieceOk = bitSet(^(b.Bbs[White].All | b.Bbs[Black].All), i)
+			pieceOk = bitSet(^(b.Bbs[White][All] | b.Bbs[Black][All]), i)
 		case Pawn:
-			pieceOk = bitSet((b.Bbs[White].Pawns | b.Bbs[Black].Pawns), i)
+			pieceOk = bitSet((b.Bbs[White][Pawn] | b.Bbs[Black][Pawn]), i)
 		case Knight:
-			pieceOk = bitSet((b.Bbs[White].Knights | b.Bbs[Black].Knights), i)
+			pieceOk = bitSet((b.Bbs[White][Knight] | b.Bbs[Black][Knight]), i)
 		case Bishop:
-			pieceOk = bitSet((b.Bbs[White].Bishops | b.Bbs[Black].Bishops), i)
+			pieceOk = bitSet((b.Bbs[White][Bishop] | b.Bbs[Black][Bishop]), i)
 		case Rook:
-			pieceOk = bitSet((b.Bbs[White].Rooks | b.Bbs[Black].Rooks), i)
+			pieceOk = bitSet((b.Bbs[White][Rook] | b.Bbs[Black][Rook]), i)
 		case Queen:
-			pieceOk = bitSet((b.Bbs[White].Queens | b.Bbs[Black].Queens), i)
+			pieceOk = bitSet((b.Bbs[White][Queen] | b.Bbs[Black][Queen]), i)
 		case King:
-			pieceOk = bitSet((b.Bbs[White].Kings | b.Bbs[Black].Kings), i)
+			pieceOk = bitSet((b.Bbs[White][King] | b.Bbs[Black][King]), i)
 		default:
 			pieceOk = false
 		}
@@ -161,11 +161,11 @@ func (b *Board) flipOppCastleRights(side CastleRightsT) {
 }
 
 func (b *Board) isWhitePieceAt(pos uint8) bool {
-	return b.Bbs[White].All & (uint64(1) << pos) != 0
+	return b.Bbs[White][All] & (uint64(1) << pos) != 0
 }
 
 func (b *Board) isBlackPieceAt(pos uint8) bool {
-	return b.Bbs[Black].All & (uint64(1) << pos) != 0
+	return b.Bbs[Black][All] & (uint64(1) << pos) != 0
 }
 
 func (b *Board) PieceAt(pos uint8) Piece {
@@ -173,34 +173,11 @@ func (b *Board) PieceAt(pos uint8) Piece {
 }
 
 // Contains bitboard representations of all the pieces for a side.
-type Bitboards struct {
-	Pawns   uint64
-	Bishops uint64
-	Knights uint64
-	Rooks   uint64
-	Queens  uint64
-	Kings   uint64
-	All     uint64
-}
+type Bitboards [NPiecesWithAll]uint64
 
 // Return the bitboard for the given piece - should really be a table lookup
 func (bb *Bitboards) pieceBitboard(piece Piece) *uint64 {
-	switch piece {
-	case Pawn:
-		return &bb.Pawns
-	case Knight:
-		return &bb.Knights
-	case Bishop:
-		return &bb.Bishops
-	case Rook:
-		return &bb.Rooks
-	case Queen:
-		return &bb.Queens
-	case King:
-		return &bb.Kings
-	default:
-		return nil
-	}
+	return &bb[piece]
 }
 
 // Data stored inside, from LSB
@@ -269,11 +246,11 @@ const (
 	Rook
 	Queen
 	King
-	NoPieces
+	NPieces
 )
 
-const All = NoPieces
-const NoPiecesWithAll Piece = NoPieces+1
+const All = NPieces
+const NPiecesWithAll = NPieces + 1
 
 // Move application data
 type MoveApplication struct {
