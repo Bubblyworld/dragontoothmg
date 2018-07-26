@@ -24,7 +24,7 @@ func applyAndValidate(t *testing.T, b *Board, m Move) func() {
 	isConsistent, badSquare := b.isConsistent()
 	
 	if !isConsistent {
-		t.Error("Inconsistent after moving", m, "from", fen, "with bad square", badSquare)
+		t.Error("Inconsistent after moving", &m, "from", fen, "with bad square", badSquare)
 	}
 
 	return unapply
@@ -38,7 +38,7 @@ func unapplyAndValidate(t *testing.T, b *Board, unapply func(), m Move) func() {
 	isConsistent, badSquare := b.isConsistent()
 	
 	if !isConsistent {
-		t.Error("Inconsistent after unmoving", m, "from", fen, "with bad square", badSquare)
+		t.Error("Inconsistent after unmoving", &m, "from", fen, "with bad square", badSquare)
 	}
 
 	return unapply

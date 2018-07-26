@@ -4,11 +4,80 @@ import (
 	//"fmt"
 )
 
+// Encapsulation of move take-back.
+// Instead of undoing all specific steps we save minimal state from before the move.
+type BoardSaveT struct {
+	Enpassant uint8
+	Halfmoveclock uint8
+	Castlerights [NColors]CastleRightsFlagsT
+	
+	FromLoc uint8
+	ToLoc uint8
+	CaptureLoc uint8
+	FromPiece Piece
+	ToPiece Piece // Different from fromPiece only for promotions
+	CapturePiece Piece // Nothing if no capture
+	
+	FromBb uint64 // Piece bitboard of the moved piece
+	ToBb uint64 // Different from fromBb only for promotions
+	CaptureBb uint64 // (opposition) bitboard for capture piece
+
+	// Rook state from before the move in case it was a castling move
+	// For a non-castling move the rook from- and to loc's are 0
+	OurRookFrom uint8
+	OurRookTo uint8
+	OurRookBb uint64
+
+	OurAllBb uint64
+	OppAllBb uint64
+	
+	Hash uint64
+}
+
+// Take back move - still likely less efficient than a bulk copy of the whole Board structure :P
+func (b *Board) Restore(bs *BoardSaveT) {
+	oppCol := b.Colortomove
+	ourCol := oppColor(oppCol)
+
+	b.Colortomove = ourCol
+
+	b.enpassant = bs.Enpassant
+	
+	b.Halfmoveclock = bs.Halfmoveclock
+	b.Fullmoveno -= uint16(ourCol)
+
+	b.castlerights = bs.Castlerights
+
+	// Ordering here is important - undo before doing capture
+	b.Bbs[ourCol][bs.ToPiece] = bs.ToBb
+	b.pieces[bs.ToLoc] = Nothing
+
+	b.Bbs[oppCol][bs.CapturePiece] = bs.CaptureBb
+	b.pieces[bs.CaptureLoc] = bs.CapturePiece
+
+	b.Bbs[ourCol][bs.FromPiece] = bs.FromBb
+	b.pieces[bs.FromLoc] = bs.FromPiece
+
+	b.Bbs[ourCol][Rook] = bs.OurRookBb
+	// Unmove rook castling move - must be a nop for non-castling
+	maybeRook := b.pieces[bs.OurRookTo]
+	b.pieces[bs.OurRookTo] = Nothing
+	b.pieces[bs.OurRookFrom] = maybeRook // this will write back the original square 0 piece if this is not actually a castling move
+
+	b.Bbs[ourCol][All] = bs.OurAllBb
+	b.Bbs[oppCol][All] = bs.OppAllBb
+
+	b.hash = bs.Hash
+}
+
 // Applies a move to the board, and returns a function that can be used to unapply it.
 // This function assumes that the given move is valid (i.e., is in the set of moves found by GenerateLegalMoves()).
 // If the move is not valid, this function has undefined behavior.
 func (b *Board) Apply(m Move) func() {
-	return b.Apply2(m).Unapply
+	var bs BoardSaveT
+	b.MakeMove(m, &bs)
+
+	return func() { b.Restore(&bs) }
 }
 
 // Add this to the e.p. square to find the captured pawn for each colour
@@ -18,19 +87,27 @@ var startingRankBbs = [NColors]uint64 {onlyRank[0], onlyRank[7]}
 
 var piecesPawnZobristIndexes = [NColors]int {0, 6}
 
-// Applies a move to the board, and returns move application information and a function that can be used to unapply it.
+// Applies a move to the board, and fills in a restore structure for subsequent move take-back.
 // This function assumes that the given move is valid (i.e., is in the set of moves found by GenerateLegalMoves()).
 // If the move is not valid, this function has undefined behavior.
-func (b *Board) Apply2(m Move) *MoveApplication {
-	// if false {
-	// 	saveBoard := *b
-	// }
+func (b *Board) MakeMove(m Move, bs *BoardSaveT) {
+
+	bs.Enpassant = b.enpassant
+	bs.Halfmoveclock = b.Halfmoveclock
+	bs.Castlerights = b.castlerights
 	
-	var moveApplication MoveApplication
-	moveApplication.Move = m
+	// var moveApplication MoveApplication
+	// moveApplication.Move = m
 
 	ourCol := b.Colortomove
 	oppCol := oppColor(ourCol)
+
+	bs.OurRookFrom = 0
+	bs.OurRookTo = 0
+	bs.OurRookBb = b.Bbs[ourCol][Rook]
+	bs.OurAllBb = b.Bbs[ourCol][All]
+	bs.OppAllBb = b.Bbs[oppCol][All]
+	bs.Hash = b.hash
 	
 	// Configure data about which pieces move
 	ourBitboardPtr, oppBitboardPtr := &b.Bbs[ourCol], &b.Bbs[oppCol]
@@ -42,22 +119,35 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	// increment after black's move
 	b.Fullmoveno += uint16(ourCol) 
 
-	fromBitboard := (uint64(1) << m.From())
-	toBitboard := (uint64(1) << m.To())
+	fromLoc := m.From()
+	bs.FromLoc = fromLoc
+	fromBitboard := (uint64(1) << fromLoc)
+	toLoc := m.To()
+	bs.ToLoc = toLoc
+	bs.CaptureLoc = toLoc
+	toBitboard := (uint64(1) << toLoc)
 	pieceType, pieceTypeBitboard := determinePieceType(b, ourBitboardPtr, fromBitboard, m.From())
 
-	moveApplication.FromPieceType = pieceType
-	moveApplication.CapturedPieceType = Nothing
-	moveApplication.IsCastling = false
+	bs.FromPiece = pieceType
+	bs.FromBb = b.Bbs[ourCol][pieceType]
+	bs.ToPiece = pieceType
+	bs.ToBb = bs.FromBb
+	bs.CapturePiece = Nothing
+	bs.CaptureBb = 0
+
+	// moveApplication.FromPieceType = pieceType
+	// moveApplication.CapturedPieceType = Nothing
+	// moveApplication.IsCastling = false
 	
 	castleStatus := 0
 	var oldRookLoc, newRookLoc uint8
-	var flippedKsCastle, flippedQsCastle, flippedOppKsCastle, flippedOppQsCastle bool
+	//var flippedKsCastle, flippedQsCastle, flippedOppKsCastle, flippedOppQsCastle bool
 
 	// If it is any kind of capture or pawn move, reset halfmove clock.
-	resetHalfmoveClockFrom := -1
+	//resetHalfmoveClockFrom := -1
+	// TODO IsCapture??? - should be cheaper later...
 	if IsCapture(m, b) || pieceType == Pawn { 
-		resetHalfmoveClockFrom = int(b.Halfmoveclock)
+		//resetHalfmoveClockFrom = int(b.Halfmoveclock)
 		b.Halfmoveclock = 0 // reset halfmove clock
 	} else {
 		b.Halfmoveclock++
@@ -78,11 +168,11 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		// King moves always strip castling rights
 		if b.weCanCastle(Kingside) {
 			b.flipOurCastleRights(Kingside)
-			flippedKsCastle = true
+			//flippedKsCastle = true
 		}
 		if b.weCanCastle(Queenside) {
 			b.flipOurCastleRights(Queenside)
-			flippedQsCastle = true
+			//flippedQsCastle = true
 		}
 	}
 
@@ -90,17 +180,20 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	if pieceType == Rook {
 		if b.weCanCastle(Kingside) && (fromBitboard&onlyFile[7] != 0) &&
 			fromBitboard&ourStartingRankBb != 0 { // king's rook
-			flippedKsCastle = true
+			//flippedKsCastle = true
 			b.flipOurCastleRights(Kingside)
 		} else if b.weCanCastle(Queenside) && (fromBitboard&onlyFile[0] != 0) &&
 			fromBitboard&ourStartingRankBb != 0 { // queen's rook
-			flippedQsCastle = true
+			//flippedQsCastle = true
 			b.flipOurCastleRights(Queenside)
 		}
 	}
 
 	// Apply the castling rook movement
 	if castleStatus != 0 {
+		bs.OurRookFrom = oldRookLoc
+		bs.OurRookTo = newRookLoc
+		
 		b.movePiece(Rook, Rook, oldRookLoc, newRookLoc, &ourBitboardPtr[Rook], &ourBitboardPtr[Rook], &ourBitboardPtr[All]) // ??? Flumoxed
 		// Update rook location in hash
 		// (Rook - 1) assumes that "Nothing" precedes "Rook" in the Piece constants list
@@ -108,23 +201,28 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][oldRookLoc]
 		b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][newRookLoc]
 
-		moveApplication.IsCastling = true
-		moveApplication.RookCastleFrom = oldRookLoc
-		moveApplication.RookCastleTo = newRookLoc
+		// moveApplication.IsCastling = true
+		// moveApplication.RookCastleFrom = oldRookLoc
+		// moveApplication.RookCastleTo = newRookLoc
 	}
 
 	// Is this an e.p. capture? Strip the opponent pawn and reset the e.p. square
 	oldEpCaptureSquare := b.enpassant
-	var actuallyPerformedEpCapture bool = false
+	//var actuallyPerformedEpCapture bool = false
 	if pieceType == Pawn && m.To() == oldEpCaptureSquare && oldEpCaptureSquare != 0 {
-		actuallyPerformedEpCapture = true
+		//actuallyPerformedEpCapture = true
 		epOpponentPawnLocation := uint8(int8(oldEpCaptureSquare) + epDelta)
+
+		bs.CapturePiece = Pawn
+		bs.CaptureLoc = epOpponentPawnLocation
+		bs.CaptureBb = b.Bbs[oppCol][Pawn]
+
 		b.removePiece(Pawn, epOpponentPawnLocation, &oppBitboardPtr[Pawn], &oppBitboardPtr[All])
 		// Remove the opponent pawn from the board hash.
 		b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex][epOpponentPawnLocation]
-		
-		moveApplication.CapturedPieceType = Pawn
-		moveApplication.CaptureLocation = epOpponentPawnLocation
+
+		// moveApplication.CapturedPieceType = Pawn
+		// moveApplication.CaptureLocation = epOpponentPawnLocation
 	}
 	// Update the en passant square
 	if pieceType == Pawn && (int8(m.To())+2*epDelta == int8(m.From())) { // pawn double push
@@ -154,16 +252,21 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 		promotedToPieceType = pieceType
 	}
 
-	moveApplication.ToPieceType = promotedToPieceType
+	//moveApplication.ToPieceType = promotedToPieceType
+	bs.ToPiece = promotedToPieceType
+	bs.ToBb = b.Bbs[ourCol][promotedToPieceType]
 
 	// Apply the move - remove the captured piece first so that we don't overwrite the moved piece
 	capturedPieceType, capturedBitboard := determinePieceType(b, oppBitboardPtr, toBitboard, m.To())
 	if capturedPieceType != Nothing {   // This does not account for e.p. captures
+		bs.CapturePiece = capturedPieceType
+		bs.CaptureBb = b.Bbs[oppCol][capturedPieceType]
+		
 		b.removePiece(capturedPieceType, m.To(), capturedBitboard, &oppBitboardPtr[All])
 		b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex+(int(capturedPieceType)-1)][m.To()] // remove the captured piece from the hash - TODO (RPJ) wrong capture location for en-passant?
-		
-		moveApplication.CapturedPieceType = capturedPieceType
-		moveApplication.CaptureLocation = m.To()
+
+		// moveApplication.CapturedPieceType = capturedPieceType
+		// moveApplication.CaptureLocation = m.To()
 	}
 	b.movePiece(pieceType, promotedToPieceType, m.From(), m.To(), pieceTypeBitboard, destTypeBitboard, &ourBitboardPtr[All])
 	b.hash ^= pieceSquareZobristC[(int(pieceType)-1)+ourPiecesPawnZobristIndex][m.From()]         // remove piece at "from"
@@ -173,10 +276,10 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	if capturedPieceType == Rook {
 		if m.To()%8 == 7 && toBitboard&oppStartingRankBb != 0 && b.oppCanCastle(Kingside) { // captured king rook
 			b.flipOppCastleRights(Kingside)
-			flippedOppKsCastle = true
+			//flippedOppKsCastle = true
 		} else if m.To()%8 == 0 && toBitboard&oppStartingRankBb != 0 && b.oppCanCastle(Queenside) { // queen rooks
 			b.flipOppCastleRights(Queenside)
-			flippedOppQsCastle = true
+			//flippedOppQsCastle = true
 		}
 	}
 	// flip the side to move in the hash
@@ -189,82 +292,82 @@ func (b *Board) Apply2(m Move) *MoveApplication {
 	b.hash ^= uint64(b.enpassant)
 
 	// Generate the unapply function (closure)
-	moveApplication.Unapply = func() {
-		// TODO - remove closure; it's cute but not entirely ideal
-		// TODO - just save/restore hash rather than manually rewinding it
-		// TODO - ditto castling rights
-		// TODO - ditto ep
-		// TODO - simplify to just plain bitboard and piece-board reversions
-		// TODO - in fact we could just copy the whole struct Board :D - it's only ~128 bytes (mmm, actually more like 200 with piece board)
-		// if false {
-		// 	*b = saveBoard
-		// 	return
-		// }
+	// moveApplication.Unapply = func() {
+	// 	// TODO - remove closure; it's cute but not entirely ideal
+	// 	// TODO - just save/restore hash rather than manually rewinding it
+	// 	// TODO - ditto castling rights
+	// 	// TODO - ditto ep
+	// 	// TODO - simplify to just plain bitboard and piece-board reversions
+	// 	// TODO - in fact we could just copy the whole struct Board :D - it's only ~128 bytes (mmm, actually more like 200 with piece board)
+	// 	// if false {
+	// 	// 	*b = saveBoard
+	// 	// 	return
+	// 	// }
 		
-		// Flip the player to move
-		b.hash ^= whiteToMoveZobristC
-		//b.Wtomove = !b.Wtomove
-		b.Colortomove = oppColor(b.Colortomove)
+	// 	// Flip the player to move
+	// 	b.hash ^= whiteToMoveZobristC
+	// 	//b.Wtomove = !b.Wtomove
+	// 	b.Colortomove = oppColor(b.Colortomove)
 
-		// Restore the halfmove clock
-		if resetHalfmoveClockFrom == -1 {
-			b.Halfmoveclock--
-		} else {
-			b.Halfmoveclock = uint8(resetHalfmoveClockFrom)
-		}
+	// 	// Restore the halfmove clock
+	// 	if resetHalfmoveClockFrom == -1 {
+	// 		b.Halfmoveclock--
+	// 	} else {
+	// 		b.Halfmoveclock = uint8(resetHalfmoveClockFrom)
+	// 	}
 
-		// Unapply move - reverse of original move
-		b.movePiece(promotedToPieceType, pieceType, m.To(), m.From(), destTypeBitboard, pieceTypeBitboard, &ourBitboardPtr[All])
-		b.hash ^= pieceSquareZobristC[(int(promotedToPieceType)-1)+ourPiecesPawnZobristIndex][m.To()] // remove the piece at "to"
-		b.hash ^= pieceSquareZobristC[(int(pieceType)-1)+ourPiecesPawnZobristIndex][m.From()]         // add the piece at "from"
+	// 	// Unapply move - reverse of original move
+	// 	b.movePiece(promotedToPieceType, pieceType, m.To(), m.From(), destTypeBitboard, pieceTypeBitboard, &ourBitboardPtr[All])
+	// 	b.hash ^= pieceSquareZobristC[(int(promotedToPieceType)-1)+ourPiecesPawnZobristIndex][m.To()] // remove the piece at "to"
+	// 	b.hash ^= pieceSquareZobristC[(int(pieceType)-1)+ourPiecesPawnZobristIndex][m.From()]         // add the piece at "from"
 
-		// Restore captured piece (excluding e.p.)
-		if capturedPieceType != Nothing { // doesn't consider e.p. captures
-			b.addPiece(capturedPieceType, m.To(), capturedBitboard, &oppBitboardPtr[All])
-			// restore the captured piece to the hash (excluding e.p.)
-			b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex+(int(capturedPieceType)-1)][m.To()]
-		}
+	// 	// Restore captured piece (excluding e.p.)
+	// 	if capturedPieceType != Nothing { // doesn't consider e.p. captures
+	// 		b.addPiece(capturedPieceType, m.To(), capturedBitboard, &oppBitboardPtr[All])
+	// 		// restore the captured piece to the hash (excluding e.p.)
+	// 		b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex+(int(capturedPieceType)-1)][m.To()]
+	// 	}
 
-		// Restore rooks from castling move
-		if castleStatus != 0 {
-			b.movePiece(Rook, Rook, newRookLoc, oldRookLoc, &ourBitboardPtr[Rook], &ourBitboardPtr[Rook], &ourBitboardPtr[All]) // ??? Flumoxed
-			// Revert castling rook move
-			b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][oldRookLoc]
-			b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][newRookLoc]
-		}
+	// 	// Restore rooks from castling move
+	// 	if castleStatus != 0 {
+	// 		b.movePiece(Rook, Rook, newRookLoc, oldRookLoc, &ourBitboardPtr[Rook], &ourBitboardPtr[Rook], &ourBitboardPtr[All]) // ??? Flumoxed
+	// 		// Revert castling rook move
+	// 		b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][oldRookLoc]
+	// 		b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][newRookLoc]
+	// 	}
 
-		// Unapply en-passant square change, and capture if necessary
-		b.hash ^= uint64(b.enpassant)        // undo the new en passant square from the hash
-		b.hash ^= uint64(oldEpCaptureSquare) // restore the old one to the hash
-		b.enpassant = oldEpCaptureSquare
-		if actuallyPerformedEpCapture {
-			epOpponentPawnLocation := uint8(int8(oldEpCaptureSquare) + epDelta)
-			b.addPiece(Pawn, epOpponentPawnLocation, &oppBitboardPtr[Pawn], &oppBitboardPtr[All])
-			// Add the opponent pawn to the board hash.
-			b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex][epOpponentPawnLocation]
-		}
+	// 	// Unapply en-passant square change, and capture if necessary
+	// 	b.hash ^= uint64(b.enpassant)        // undo the new en passant square from the hash
+	// 	b.hash ^= uint64(oldEpCaptureSquare) // restore the old one to the hash
+	// 	b.enpassant = oldEpCaptureSquare
+	// 	if actuallyPerformedEpCapture {
+	// 		epOpponentPawnLocation := uint8(int8(oldEpCaptureSquare) + epDelta)
+	// 		b.addPiece(Pawn, epOpponentPawnLocation, &oppBitboardPtr[Pawn], &oppBitboardPtr[All])
+	// 		// Add the opponent pawn to the board hash.
+	// 		b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex][epOpponentPawnLocation]
+	// 	}
 
-		// Decrement move clock - decrement after undoing black's move
-		b.Fullmoveno -= uint16(ourCol)
+	// 	// Decrement move clock - decrement after undoing black's move
+	// 	b.Fullmoveno -= uint16(ourCol)
 
-		// Restore castling flags
-		// Must update castling flags AFTER turn swap
-		// TODO just keep the flags? No branch
-		if flippedKsCastle {
-			b.flipOurCastleRights(Kingside)
-		}
-		if flippedQsCastle {
-			b.flipOurCastleRights(Queenside)
-		}
-		if flippedOppKsCastle {
-			b.flipOppCastleRights(Kingside)
-		}
-		if flippedOppQsCastle {
-			b.flipOppCastleRights(Queenside)
-		}
-	}
+	// 	// Restore castling flags
+	// 	// Must update castling flags AFTER turn swap
+	// 	// TODO just keep the flags? No branch
+	// 	if flippedKsCastle {
+	// 		b.flipOurCastleRights(Kingside)
+	// 	}
+	// 	if flippedQsCastle {
+	// 		b.flipOurCastleRights(Queenside)
+	// 	}
+	// 	if flippedOppKsCastle {
+	// 		b.flipOppCastleRights(Kingside)
+	// 	}
+	// 	if flippedOppQsCastle {
+	// 		b.flipOppCastleRights(Queenside)
+	// 	}
+	// }
 	
-	return &moveApplication
+	// return &moveApplication
 }
 
 // Applies a null move to the board, and returns a function that can be used to unapply it.
