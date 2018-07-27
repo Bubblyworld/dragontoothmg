@@ -194,10 +194,14 @@ func (m *Move) To() uint8 {
 func (m *Move) From() uint8 {
 	return uint8((*m & 0xFC0) >> 6)
 }
-
 // Whether the move involves promoting a pawn.
 func (m *Move) Promote() Piece {
 	return Piece((*m & 0x7000) >> 12)
+}
+// Is the move simple - i.e. NOT promo, en-passant or castling
+// This is just a hint - if not set then move application will still work.
+func (m *Move) IsSimple() bool {
+	return (*m & Move(0x8000)) != 0
 }
 func (m *Move) Setto(s Square) *Move {
 	*m = *m & ^(Move(0x3F)) | Move(s)
@@ -209,6 +213,10 @@ func (m *Move) Setfrom(s Square) *Move {
 }
 func (m *Move) Setpromote(p Piece) *Move {
 	*m = *m & ^(Move(0x7000)) | (Move(p) << 12)
+	return m
+}
+func (m *Move) Setsimple() *Move {
+	*m = *m | Move(0x8000)
 	return m
 }
 func (m *Move) String() string {

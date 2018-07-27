@@ -185,7 +185,7 @@ func (b *Board) generatePinnedMoves(moveList *[]Move, allowDest uint64) uint64 {
 						}
 					} else { // no promotion
 						var move Move
-						move.Setfrom(Square(pinnedPieceIdx)).Setto(Square(currBishopIdx))
+						move.Setfrom(Square(pinnedPieceIdx)).Setto(Square(currBishopIdx)).Setsimple()
 						*moveList = append(*moveList, move)
 					}
 				}
@@ -234,6 +234,7 @@ func (b *Board) pawnPushes(moveList *[]Move, nonpinned uint64, allowDest uint64)
 				*moveList = append(*moveList, move)
 			}
 		} else {
+			move.Setsimple()
 			*moveList = append(*moveList, move)
 		}
 	}
@@ -242,7 +243,7 @@ func (b *Board) pawnPushes(moveList *[]Move, nonpinned uint64, allowDest uint64)
 		doubleTarget := bits.TrailingZeros64(doubleTargets)
 		doubleTargets &= doubleTargets - 1 // unset the lowest active bit
 		var move Move
-		move.Setfrom(Square(doubleTarget + 2*oneRankBack)).Setto(Square(doubleTarget))
+		move.Setfrom(Square(doubleTarget + 2*oneRankBack)).Setto(Square(doubleTarget)).Setsimple()
 		*moveList = append(*moveList, move)
 	}
 }
@@ -326,6 +327,9 @@ func (b *Board) pawnCaptures(moveList *[]Move, nonpinned uint64, allowDest uint6
 				}
 				continue
 			}
+			if move.To() != b.enpassant {
+				move.Setsimple()
+			}
 			*moveList = append(*moveList, move)
 		}
 	}
@@ -398,7 +402,7 @@ func (b *Board) kingPushes(moveList *[]Move, ptrToOurBitboards *Bitboards, allow
 			continue
 		}
 		var move Move
-		move.Setfrom(Square(ourKingLocation)).Setto(Square(target))
+		move.Setfrom(Square(ourKingLocation)).Setto(Square(target)).Setsimple()
 		*moveList = append(*moveList, move)
 	}
 
@@ -522,7 +526,7 @@ func genMovesFromTargets(moveList *[]Move, origin Square, targets uint64) {
 		target := bits.TrailingZeros64(targets)
 		targets &= targets - 1
 		var move Move
-		move.Setfrom(origin).Setto(Square(target))
+		move.Setfrom(origin).Setto(Square(target)).Setsimple()
 		*moveList = append(*moveList, move)
 	}
 }
