@@ -104,55 +104,42 @@ func (b *Board) MakeSimpleMove(m Move, bs *BoardSaveT) {
 	bs.OppAllBb = b.Bbs[oppCol][All]
 	bs.Hash = b.hash
 	
-	// Configure data about which pieces move
-	ourBitboardPtr, oppBitboardPtr := &b.Bbs[ourCol], &b.Bbs[oppCol]
-	epDelta := epDeltas[ourCol] // add this to the e.p. square to find the captured pawn
-	ourStartingRankBb, oppStartingRankBb := startingRankBbs[ourCol], startingRankBbs[oppCol] // the starting rank of each side
-	// the constant that represents the index into pieceSquareZobristC for the pawn of our color
-	ourPiecesPawnZobristIndex, oppPiecesPawnZobristIndex := piecesPawnZobristIndexes[ourCol], piecesPawnZobristIndexes[oppCol]
-
 	// increment after black's move
 	b.Fullmoveno += uint16(ourCol) 
+	b.Halfmoveclock++ // for now - we reset to 0 for pawn move or capture below
 
-	fromLoc := m.From()
+	fromLoc, toLoc := m.From(), m.To()
 	bs.FromLoc = fromLoc
-	fromBitboard := (uint64(1) << fromLoc)
-	toLoc := m.To()
+	fromBit := (uint64(1) << fromLoc)
 	bs.ToLoc = toLoc
-	bs.CaptureLoc = toLoc
-	toBitboard := (uint64(1) << toLoc)
-	pieceType, pieceTypeBitboard := determinePieceType(b, ourBitboardPtr, fromBitboard, m.From())
+	toBit := (uint64(1) << toLoc)
+	fromPiece := b.pieces[fromLoc]
+	fromBb := &b.Bbs[ourCol][fromPiece]
 
-	bs.FromPiece = pieceType
-	bs.FromBb = b.Bbs[ourCol][pieceType]
-	bs.ToPiece = pieceType
+	bs.FromPiece = fromPiece
+	bs.FromBb = *fromBb
+
+	bs.ToPiece = fromPiece
 	bs.ToBb = bs.FromBb
-	bs.CapturePiece = Nothing
-	bs.CaptureBb = 0
 
-	// castleStatus := 0
-	// var oldRookLoc, newRookLoc uint8
+	bs.CaptureLoc = toLoc
+	capturePiece := b.pieces[toLoc]
+	bs.CapturePiece = capturePiece
+	bs.CaptureBb = b.Bbs[oppCol][capturePiece]
 
-	// If it is any kind of capture or pawn move, reset halfmove clock.
-	// TODO IsCapture??? - should be cheaper to calculate later...
-	if IsCapture(m, b) || pieceType == Pawn { 
-		b.Halfmoveclock = 0 // reset halfmove clock
-	} else {
-		b.Halfmoveclock++
-	}
+	// Remove the old en-passant square from the hash
+	b.hash ^= uint64(b.enpassant)
+	b.enpassant = 0
 
-	// King moves strip castling rights
-	if pieceType == King {
-		// // TODO(dylhunn): do this without a branch
-		// if m.To()-m.From() == 2 { // castle short
-		// 	castleStatus = 1
-		// 	oldRookLoc = m.To() + 1
-		// 	newRookLoc = m.To() - 1
-		// } else if int(m.To())-int(m.From()) == -2 { // castle long
-		// 	castleStatus = -1
-		// 	oldRookLoc = m.To() - 2
-		// 	newRookLoc = m.To() + 1
-		// }
+	if fromPiece == Pawn {
+		// Reset the halfmove clock (pawn move)
+		b.Halfmoveclock = 0
+		// Update the en-passant square
+		epDelta := epDeltas[ourCol] // add this to the e.p. square to find the captured pawn
+		if (int8(toLoc)+2*epDelta == int8(fromLoc)) { // pawn double push
+			b.enpassant = uint8(int8(toLoc) + epDelta)
+		}
+	} else if fromPiece == King {
 		// King moves always strip castling rights
 		if b.weCanCastle(Kingside) {
 			b.flipOurCastleRights(Kingside)
@@ -160,105 +147,63 @@ func (b *Board) MakeSimpleMove(m Move, bs *BoardSaveT) {
 		if b.weCanCastle(Queenside) {
 			b.flipOurCastleRights(Queenside)
 		}
-	}
-
-	// Rook moves strip castling rights
-	if pieceType == Rook {
-		if b.weCanCastle(Kingside) && (fromBitboard&onlyFile[7] != 0) &&
-			fromBitboard&ourStartingRankBb != 0 { // king's rook
+	} else if fromPiece == Rook {
+		// Rook moves strip castling rights
+		// TODO use exact rook locations - more efficient
+		ourStartingRankBb := startingRankBbs[ourCol]
+		if b.weCanCastle(Kingside) && (fromBit&onlyFile[7] != 0) &&
+			fromBit&ourStartingRankBb != 0 { // king's rook
 			b.flipOurCastleRights(Kingside)
-		} else if b.weCanCastle(Queenside) && (fromBitboard&onlyFile[0] != 0) &&
-			fromBitboard&ourStartingRankBb != 0 { // queen's rook
+		} else if b.weCanCastle(Queenside) && (fromBit&onlyFile[0] != 0) &&
+			fromBit&ourStartingRankBb != 0 { // queen's rook
 			b.flipOurCastleRights(Queenside)
 		}
 	}
-
-	// Apply the castling rook movement
-	// if castleStatus != 0 {
-	// 	bs.OurRookFrom = oldRookLoc
-	// 	bs.OurRookTo = newRookLoc
 		
-	// 	b.movePiece(Rook, Rook, oldRookLoc, newRookLoc, &ourBitboardPtr[Rook], &ourBitboardPtr[Rook], &ourBitboardPtr[All]) // ??? Flumoxed
-	// 	// Update rook location in hash
-	// 	// (Rook - 1) assumes that "Nothing" precedes "Rook" in the Piece constants list
-	// 	b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][oldRookLoc]
-	// 	b.hash ^= pieceSquareZobristC[ourPiecesPawnZobristIndex+(int(Rook)-1)][newRookLoc]
-	// }
+	// Add the new en-passant square to the hash
+	b.hash ^= uint64(b.enpassant)
 
-	// Is this an e.p. capture? Strip the opponent pawn and reset the e.p. square
-	oldEpCaptureSquare := b.enpassant
-	// if pieceType == Pawn && m.To() == oldEpCaptureSquare && oldEpCaptureSquare != 0 {
-	// 	fmt.Println("Boooooooooooooooooooooooooo!!! en-passant in simple move !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1")
-	// 	epOpponentPawnLocation := uint8(int8(oldEpCaptureSquare) + epDelta)
+	// Remove the captured piece
+	if capturePiece != Nothing {
+		// Reset the halfmove clock (capture)
+		b.Halfmoveclock = 0
 
-	// 	bs.CapturePiece = Pawn
-	// 	bs.CaptureLoc = epOpponentPawnLocation
-	// 	bs.CaptureBb = b.Bbs[oppCol][Pawn]
+		// Remove the captured piece.
+		b.pieces[toLoc] = Nothing
+		b.Bbs[oppCol][capturePiece] &= ^toBit
+		b.Bbs[oppCol][All] &= ^toBit
+		b.hash ^= pieceSquareZobristC[piecesPawnZobristIndexes[oppCol] + (int(capturePiece)-1)][toLoc] // remove the captured piece from the hash - TODO (RPJ) wrong capture location for en-passant?
 
-	// 	b.removePiece(Pawn, epOpponentPawnLocation, &oppBitboardPtr[Pawn], &oppBitboardPtr[All])
-	// 	// Remove the opponent pawn from the board hash.
-	// 	b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex][epOpponentPawnLocation]
-	// }
-	// Update the en passant square
-	if pieceType == Pawn && (int8(m.To())+2*epDelta == int8(m.From())) { // pawn double push
-		b.enpassant = uint8(int8(m.To()) + epDelta)
-	} else {
-		b.enpassant = 0
-	}
-
-	// Is this a promotion?
-	var destTypeBitboard *uint64 = pieceTypeBitboard
-	var promotedToPieceType Piece = pieceType // if not promoted, same as pieceType
-	// switch m.Promote() {
-	// case Queen:
-	// 	destTypeBitboard = &(ourBitboardPtr[Queen])
-	// 	promotedToPieceType = Queen
-	// case Knight:
-	// 	destTypeBitboard = &(ourBitboardPtr[Knight])
-	// 	promotedToPieceType = Knight
-	// case Rook:
-	// 	destTypeBitboard = &(ourBitboardPtr[Rook])
-	// 	promotedToPieceType = Rook
-	// case Bishop:
-	// 	destTypeBitboard = &(ourBitboardPtr[Bishop])
-	// 	promotedToPieceType = Bishop
-	// default:
-	// 	destTypeBitboard = pieceTypeBitboard
-	// 	promotedToPieceType = pieceType
-	// }
-
-	//moveApplication.ToPieceType = promotedToPieceType
-	bs.ToPiece = promotedToPieceType
-	bs.ToBb = b.Bbs[ourCol][promotedToPieceType]
-
-	// Apply the move - remove the captured piece first so that we don't overwrite the moved piece
-	capturedPieceType, capturedBitboard := determinePieceType(b, oppBitboardPtr, toBitboard, m.To())
-	if capturedPieceType != Nothing {   // This does not account for e.p. captures
-		bs.CapturePiece = capturedPieceType
-		bs.CaptureBb = b.Bbs[oppCol][capturedPieceType]
-		
-		b.removePiece(capturedPieceType, m.To(), capturedBitboard, &oppBitboardPtr[All])
-		b.hash ^= pieceSquareZobristC[oppPiecesPawnZobristIndex+(int(capturedPieceType)-1)][m.To()] // remove the captured piece from the hash - TODO (RPJ) wrong capture location for en-passant?
-	}
-	b.movePiece(pieceType, promotedToPieceType, m.From(), m.To(), pieceTypeBitboard, destTypeBitboard, &ourBitboardPtr[All])
-	b.hash ^= pieceSquareZobristC[(int(pieceType)-1)+ourPiecesPawnZobristIndex][m.From()]         // remove piece at "from"
-	b.hash ^= pieceSquareZobristC[(int(promotedToPieceType)-1)+ourPiecesPawnZobristIndex][m.To()] // add piece at "to"
-
-	// If a rook was captured, it strips castling rights
-	if capturedPieceType == Rook {
-		if m.To()%8 == 7 && toBitboard&oppStartingRankBb != 0 && b.oppCanCastle(Kingside) { // captured king rook
-			b.flipOppCastleRights(Kingside)
-		} else if m.To()%8 == 0 && toBitboard&oppStartingRankBb != 0 && b.oppCanCastle(Queenside) { // queen rooks
-			b.flipOppCastleRights(Queenside)
+		// If a rook was captured, it strips castling rights
+		if capturePiece == Rook {
+			// TODO just use exact fromLoc's
+			oppStartingRankBb := startingRankBbs[oppCol] // the starting rank of each side
+			if toLoc%8 == 7 && toBit&oppStartingRankBb != 0 && b.oppCanCastle(Kingside) { // captured king rook
+				b.flipOppCastleRights(Kingside)
+			} else if toLoc%8 == 0 && toBit&oppStartingRankBb != 0 && b.oppCanCastle(Queenside) { // queen rooks
+				b.flipOppCastleRights(Queenside)
+			}
 		}
 	}
-	// flip the side to move in the hash
-	b.hash ^= whiteToMoveZobristC
-	b.Colortomove = oppColor(b.Colortomove)
 
-	// remove the old en passant square from the hash, and add the new one
-	b.hash ^= uint64(oldEpCaptureSquare)
-	b.hash ^= uint64(b.enpassant)
+	// index into pieceSquareZobristC
+	ourPiecesPawnZobristIndex := piecesPawnZobristIndexes[ourCol]
+
+	// Remove piece from 'from'
+	b.pieces[fromLoc] = Nothing
+	b.Bbs[ourCol][fromPiece] &= ^fromBit
+	b.Bbs[ourCol][All] &= ^fromBit
+	b.hash ^= pieceSquareZobristC[(int(fromPiece)-1) + ourPiecesPawnZobristIndex][fromLoc]
+
+	// Add piece at 'to'
+	b.pieces[toLoc] = fromPiece
+	b.Bbs[ourCol][fromPiece] |= toBit
+	b.Bbs[ourCol][All] |= toBit
+	b.hash ^= pieceSquareZobristC[(int(fromPiece)-1) + ourPiecesPawnZobristIndex][toLoc]
+
+	// Flip the side to move
+	b.Colortomove = oppColor(b.Colortomove)
+	b.hash ^= whiteToMoveZobristC
 }
 
 // Applies a move to the board, and fills in a restore structure for subsequent move take-back.
