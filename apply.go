@@ -176,7 +176,7 @@ func (b *Board) MakeSimpleMove(m Move, bs *BoardSaveT) {
 
 		// If a rook was captured, it strips castling rights
 		if capturePiece == Rook {
-			// TODO just use exact fromLoc's
+			// TODO just use exact toLoc's
 			oppStartingRankBb := startingRankBbs[oppCol] // the starting rank of each side
 			if toLoc%8 == 7 && toBit&oppStartingRankBb != 0 && b.oppCanCastle(Kingside) { // captured king rook
 				b.flipOppCastleRights(Kingside)

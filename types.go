@@ -188,6 +188,10 @@ func (bb *Bitboards) pieceBitboard(piece Piece) *uint64 {
 // Move bitwise structure; internal implementation is private.
 type Move uint16
 
+func mkSimpleMove(from Square, to Square) Move {
+	return 0x8000 | (Move(from) << 6) | Move(to)
+}
+
 func (m *Move) To() uint8 {
 	return uint8(*m & 0x3F)
 }

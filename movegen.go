@@ -525,9 +525,9 @@ func genMovesFromTargets(moveList *[]Move, origin Square, targets uint64) {
 	for targets != 0 {
 		target := bits.TrailingZeros64(targets)
 		targets &= targets - 1
-		var move Move
-		move.Setfrom(origin).Setto(Square(target)).Setsimple()
-		*moveList = append(*moveList, move)
+		// var move Move
+		// move.Setfrom(origin).Setto(Square(target)).Setsimple()
+		*moveList = append(*moveList, mkSimpleMove(origin, Square(target)))
 	}
 }
 
