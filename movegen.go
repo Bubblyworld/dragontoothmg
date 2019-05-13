@@ -337,9 +337,6 @@ func (b *Board) pawnCaptures(moveList *[]Move, nonpinned uint64, allowDest uint6
 
 // A helper than generates bitboards for available pawn captures.
 func (b *Board) pawnCaptureBitboards(nonpinned uint64) (east uint64, west uint64) {
-	notHFile := uint64(0x7F7F7F7F7F7F7F7F)
-	notAFile := uint64(0xFEFEFEFEFEFEFEFE)
-
 	ourCol := b.Colortomove
 	ourPieces := &b.Bbs[ourCol]
 	oppCol := oppColor(ourCol)
@@ -353,15 +350,12 @@ func (b *Board) pawnCaptureBitboards(nonpinned uint64) (east uint64, west uint64
 	}
 
 	ourpawns := ourPieces[Pawn] & nonpinned
-	
-	// TODO no branch
-	if b.Colortomove == White {
-		east = ourpawns << 9 & notAFile & targets
-		west = ourpawns << 7 & notHFile & targets
-	} else {
-		east = ourpawns >> 7 & notAFile & targets
-		west = ourpawns >> 9 & notHFile & targets
-	}
+
+	allEast, allWest = CalculatePawnsCaptureBitboard(ourpawns, b.Colortomove)
+
+	east = allEast & targets
+	west = allWest & targets
+
 	return
 }
 
@@ -676,3 +670,33 @@ func CalculateBishopMoveBitboard(currBishop uint8, allPieces uint64) uint64 {
 	targets := magicMovesBishop[currBishop][dbindex]
 	return targets
 }
+
+// Export the Knight Moves table
+func KnightMovesBitboard(currKnight uint8) uint64 {
+	return knightMasks[currKnight]
+}
+
+// Calculate the pawn attack bitboard for the given pawns of the given color.
+// This will include target squares of the same color and empty target squares.
+func CalculatePawnsCaptureBitboard(ourpawns uint64, color ColorT) (east uint64, west uint64) {
+	notHFile := uint64(0x7F7F7F7F7F7F7F7F)
+	notAFile := uint64(0xFEFEFEFEFEFEFEFE)
+
+	// TODO no branch
+	if color == White {
+		east = ourpawns << 9 & notAFile
+		west = ourpawns << 7 & notHFile
+	} else {
+		east = ourpawns >> 7 & notAFile
+		west = ourpawns >> 9 & notHFile
+	}
+
+	return
+}	
+
+// Export the King Moves table
+func KingMovesBitboard(currKing uint8) uint64 {
+	return kingMasks[currKing]
+}
+
+#$%^#
